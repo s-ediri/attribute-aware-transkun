@@ -1,4 +1,4 @@
-# Piano Transcription with Neural Semi-CRF
+  # Piano Transcription with Neural Semi-CRF
 
 
 This repo contains code for following papers for transcribing expressive piano performance into MIDI.
@@ -40,16 +40,18 @@ Be cautious that the convention for the piano transcription task in previous wor
 
 <img width="1405" alt="image" src="https://user-images.githubusercontent.com/1996534/183318064-db32dbef-500d-4710-93a1-10acd3eb8825.png">
 
-This system works as follows: 
-1. A score tensor is computed from the input audio that scores every possible intervals for whether or not being an event.
-2. The score tensor computed in (1) is then decoded by the proposed semi-CRF layer to obtain event intervals directly via dynamic programming (viterbi).
-3. Attributes, e.g., velocity and refined onset/offset position, associated with each interval are then predicted from the extracted event intervals from (2).
+This system works as follows:
+1. A score tensor is computed from the input audio for every possible event interval.
+2. V2 also predicts categorical velocity, sub-frame onset/offset timing, and boundary-presence factors at every pitch/time boundary. Their log-partitions are included in every candidate interval score.
+3. The resulting joint interval/attribute score tensor is decoded by the semi-CRF with dynamic programming (Viterbi). Attributes are read from the same factors that participated in interval selection.
 
 ### V2 
 In V2, as demonstrated in the ISMIR 2024 paper, the changes from V1 are:
 1. the model architecture is replaced with a transformer
 2. The Score module is simplified with Scaled Inner Product Interval Scaling. The noise score is now zero tensor for compatibility with V1.
 3. Segmentwise processing now handles incomplete events with a longer duration 
+
+The structured-attribute extension uses 128 velocity classes and configurable sub-frame timing bins (`structuredTimingBins`, 21 by default). `structuredAttributeWeight` controls the contribution of these factors to interval scoring. Existing V2 checkpoints load with `strict=False`; the new head is initialized to an approximately neutral distribution and must be trained or fine-tuned before its attributes can guide interval selection.
 
 ## Basic Usage
 
@@ -154,7 +156,7 @@ We assume the data contains only the same sampling rate 44100hz. Therefore for t
 
 Assuming all audio files have already been converted to the same sampling rate, we iterate the entire dataset to combine the groundtruth midi and metadata into a single file.
 
-The following script will generate train.pt, val.pt and test.pt
+The following script will generate `train.pickle`, `val.pickle`, and `test.pickle`.
 
 ```bash
 python3 -m transkun.createDatasetMaestro -h
@@ -170,7 +172,7 @@ optional arguments:
   --noPedalExtension  Do not perform pedal extension according to the sustain pedal
 ```
 
-This command will generate train.pt, dev.pt, test.pt in the outputPath.
+This command will generate `train.pickle`, `val.pickle`, and `test.pickle` in `outputPath`.
 
 ## Training
 

@@ -8,6 +8,13 @@ from .Util import *
 import torch.distributed as dist
 from .Evaluation import *
 from .LayersTransformer import *
+from .StructuredAttributes import (
+        add_attribute_scores,
+        attribute_log_prob,
+        gather_attribute_logits,
+        timing_index_to_value,
+        timing_value_to_index,
+        )
 from collections import defaultdict
 
 
@@ -48,8 +55,11 @@ class ModelConfig:
         self.hiddenFactorAttn= 1
         self.hiddenFactor = 4
 
-        self.velocityPredictorHiddenSize = 512
-        self.refinedOFPredictorHiddenSize = 512
+        # Structured note attributes.  These boundary-local factors are cheap
+        # enough to score for every candidate interval in the semi-CRF.
+        self.structuredAttributeHiddenSize = 256
+        self.structuredTimingBins = 21
+        self.structuredAttributeWeight = 1.0
 
         self.scoringExpansionFactor = 4
         self.useInnerProductScorer = True
@@ -109,23 +119,16 @@ class TransKun(torch.nn.Module):
             self.scorer = PairwiseFeatureBatch(512, outputSize= len(self.targetMIDIPitch) )
 
 
-        self.velocityPredictor = nn.Sequential(
-                                nn.Linear(conf.baseSize*3*conf.scoringExpansionFactor,
-                                    conf.velocityPredictorHiddenSize),
+        nTimingBins = conf.structuredTimingBins
+        self.structuredAttributePredictor = nn.Sequential(
+                                nn.Linear(conf.baseSize*conf.scoringExpansionFactor,
+                                    conf.structuredAttributeHiddenSize),
                                 nn.GELU(),
                                 nn.Dropout(conf.velocityDropoutProb),
-                                nn.Linear(conf.velocityPredictorHiddenSize, 128)
+                                nn.Linear(conf.structuredAttributeHiddenSize,
+                                    128 + 2*nTimingBins + 4)
                                 )
-
-
-        # output dequantize offset + presence logits
-        self.refinedOFPredictor = nn.Sequential(
-                                nn.Linear(conf.baseSize*3*conf.scoringExpansionFactor,
-                                    conf.refinedOFPredictorHiddenSize),
-                                nn.GELU(),
-                                nn.Dropout(conf.refinedOFDropoutProb),
-                                nn.Linear(conf.refinedOFPredictorHiddenSize, 4)
-                                )
+        self.resetStructuredAttributePredictor()
 
         
         self.backbone = Backbone(
@@ -146,7 +149,63 @@ class TransKun(torch.nn.Module):
     def getDevice(self):
         return next(self.parameters()).device
 
+    def resetStructuredAttributePredictor(self):
+        """Start new structured factors as normalized, nearly neutral tables.
+
+        This makes an old V2 checkpoint safe to fine-tune with the new model:
+        before learning, every attribute log-partition is approximately zero.
+        """
+        nTimingBins = self.conf.structuredTimingBins
+        outputLayer = self.structuredAttributePredictor[-1]
+        nn.init.normal_(outputLayer.weight, std=1e-4)
+        with torch.no_grad():
+            outputLayer.bias[:128].fill_(-math.log(128))
+            outputLayer.bias[128:128+nTimingBins].fill_(-math.log(nTimingBins))
+            outputLayer.bias[128+nTimingBins:128+2*nTimingBins].fill_(-math.log(nTimingBins))
+            outputLayer.bias[128+2*nTimingBins:].fill_(-math.log(2))
+
                 
+
+    def predictStructuredAttributes(self, ctx):
+        """Predict attributes at every pitch/time boundary.
+
+        The returned logits parameterize labels of an interval, rather than a
+        post-hoc regression performed only after interval decoding.
+        """
+        nTimingBins = self.conf.structuredTimingBins
+        logits = self.structuredAttributePredictor(ctx)
+        velocity, onsetTiming, offsetTiming, onsetPresence, offsetPresence = logits.split(
+                [128, nTimingBins, nTimingBins, 2, 2], dim=-1)
+        return {
+                "velocity": velocity,
+                "onsetTiming": onsetTiming,
+                "offsetTiming": offsetTiming,
+                "onsetPresence": onsetPresence,
+                "offsetPresence": offsetPresence,
+                }
+
+    def addStructuredAttributeScores(self, crf, attributeLogits):
+        """Marginalize attribute labels into each semi-CRF interval score."""
+        return add_attribute_scores(
+                crf, attributeLogits, self.conf.structuredAttributeWeight)
+
+    def timingValueToIndex(self, value):
+        return timing_value_to_index(value, self.conf.structuredTimingBins)
+
+    def timingIndexToValue(self, index):
+        return timing_index_to_value(index, self.conf.structuredTimingBins)
+
+    def gatherStructuredAttributeLogits(self, attributeLogits, intervalsBatch):
+        """Gather begin/end attribute tables for a batch of interval paths."""
+        return gather_attribute_logits(
+                attributeLogits, intervalsBatch, len(self.targetMIDIPitch))
+
+    def structuredAttributeLogProb(self, gathered, velocity, timing, presence):
+        """Observed-label score minus the label log-partition per interval."""
+        return attribute_log_prob(
+                gathered, velocity, timing, presence,
+                self.conf.structuredTimingBins,
+                self.conf.structuredAttributeWeight)
 
     def processFramesBatch(self, framesBatch):
         
@@ -220,9 +279,11 @@ class TransKun(torch.nn.Module):
         # with shape [*, nBatch*nSym]
 
         crf = CRF.NeuralSemiCRFInterval(S_batch, S_skip_batch)
+        attributeLogits = self.predictStructuredAttributes(ctx)
+        crf = self.addStructuredAttributeScores(crf, attributeLogits)
 
 
-        return crf, ctx
+        return crf, ctx, attributeLogits
 
 
     def log_prob(self, xBatch, notesBatch):
@@ -237,7 +298,7 @@ class TransKun(torch.nn.Module):
         framesBatch = makeFrame(xBatch, self.hopSize, self.windowSize)
 
         # crf returned would be nBatch*nChannel flattened for batch processing
-        crfBatch, ctxBatch = self.processFramesBatch(framesBatch)
+        crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(framesBatch)
 
 
         # prepare groundtruth 
@@ -260,7 +321,7 @@ class TransKun(torch.nn.Module):
         # print(tmp.max())
 
 
-        pathScore = crfBatch.evalPath(intervalsBatch_flatten) 
+        pathScore = crfBatch.evalPath(intervalsBatch_flatten)
         logZ = crfBatch.computeLogZ()
         logProb = pathScore - logZ
         logProb = logProb.view(nBatch, -1)
@@ -272,60 +333,19 @@ class TransKun(torch.nn.Module):
 
         if nIntervalsAll>0:
 
-            ctx_a_all, ctx_b_all, symIdx_all, scatterIdx_all = self.fetchIntervalFeaturesBatch(ctxBatch, intervalsBatch)
-
-
-            attributeInput = torch.cat([ctx_a_all,
-                                       ctx_b_all,
-                                       ctx_a_all*ctx_b_all
-                                       ],dim = -1)
-
-            
-            # prepare groundtruth for velocity
-
             velocityBatch = sum(velocityBatch, [] )
             ofRefinedGTBatch = sum(ofRefinedGTBatch, [] )
             ofPresenceGTBatch = sum(ofPresenceGTBatch, [])
+            gathered, scatterIdx_all = self.gatherStructuredAttributeLogits(
+                    attributeLogits, intervalsBatch)
+            logProbAttributes = self.structuredAttributeLogProb(
+                    gathered, velocityBatch, ofRefinedGTBatch, ofPresenceGTBatch)
 
-            logitsVelocity = self.velocityPredictor(attributeInput)
-            logitsVelocity = F.log_softmax(logitsVelocity, dim = -1)
-
-            velocityBatch= torch.tensor(velocityBatch, dtype =torch.long, device = device)
-
-            logProbVelocity = torch.gather(logitsVelocity, dim = -1, index = velocityBatch.unsqueeze(-1)).squeeze(-1)
-
-            ofRefinedGTBatch = torch.tensor(ofRefinedGTBatch, device = device, dtype = torch.float)
-            ofPresenceGTBatch = torch.tensor(ofPresenceGTBatch, device = device, dtype = torch.float)
-            
-
-            # shift it to [0,1]
-            # print("GT:", ofRefinedGTBatch)
-
-            ofRefinedGTBatch = ofRefinedGTBatch*0.99+0.5
-
-            ofValue, ofPresence = self.refinedOFPredictor(attributeInput).chunk(2, dim = -1)
-
-
-            # ofValue = F.logsigmoid(ofValue)
-
-            ofDist = torch.distributions.ContinuousBernoulli(logits=ofValue)
-
-            logProbOF = ofDist.log_prob(ofRefinedGTBatch).sum(-1)
-
-            ofPresenceDist = torch.distributions.Bernoulli(logits = ofPresence)
-
-            logProbOFPresence = ofPresenceDist.log_prob(ofPresenceGTBatch).sum(-1)
-
-
-
-
-
-
-            # scatter them back
+            # The CRF path score already contains the marginalized attribute
+            # log-partitions.  Adding conditional label log-probabilities turns
+            # the numerator into the observed joint interval/attribute score.
             logProb = logProb.view(-1)
-
-            
-            logProb = logProb.scatter_add(-1, scatterIdx_all, logProbVelocity+ logProbOF + logProbOFPresence)
+            logProb = logProb.scatter_add(-1, scatterIdx_all, logProbAttributes)
 
         logProb = logProb.view(nBatch, -1)
 
@@ -398,7 +418,7 @@ class TransKun(torch.nn.Module):
         framesBatch = makeFrame(xBatch, self.hopSize, self.windowSize)
 
         # crf returned would be nBatch*nChannel flattened for batch processing
-        crfBatch, ctxBatch = self.processFramesBatch(framesBatch)
+        crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(framesBatch)
 
         path = crfBatch.decode()
 
@@ -442,43 +462,30 @@ class TransKun(torch.nn.Module):
 
         # then make forced predictions about velocity and refined onset offset
 
-        ctx_a_all, ctx_b_all, symIdx_all, scatterIdx_all = self.fetchIntervalFeaturesBatch(ctxBatch, intervalsBatch)
-
-        attributeInput = torch.cat([ctx_a_all,
-                                   ctx_b_all,
-                                   ctx_a_all*ctx_b_all,
-                                   ],dim = -1)
-
-
-
-        logitsVelocity = self.velocityPredictor(attributeInput)
-        pVelocity = F.softmax(logitsVelocity, dim = -1)
-
-        
-        #MSE
-        w = torch.arange(128, device = device)
-        velocity = (pVelocity*w).sum(-1)
-
-
-        ofValue, _ = self.refinedOFPredictor(attributeInput).chunk(2, dim = -1)
-        # ofValue = torch.sigmoid(ofValue)-0.5
-        ofDist = torch.distributions.ContinuousBernoulli(logits=ofValue)
-
-        ofValue = (ofDist.mean-0.5)/0.99
-        ofValue = torch.clamp(ofValue, -0.5, 0.5)
-
-
+        gathered, _ = self.gatherStructuredAttributeLogits(attributeLogits, intervalsBatch)
         velocityBatch = sum(velocityBatch, [] )
         velocityBatch= torch.tensor(velocityBatch, dtype =torch.long, device = device)
 
         ofRefinedGTBatch = sum(ofRefinedGTBatch, [] )
         ofRefinedGTBatch = torch.tensor(ofRefinedGTBatch, device = device, dtype = torch.float)
-        # compare p velocity with ofValue
+        if gathered is None:
+            seOF = torch.zeros((), device=device)
+            seVelocity = torch.zeros((), device=device)
+        else:
+            pVelocity = F.softmax(gathered["velocity"], dim = -1)
+            w = torch.arange(128, device = device)
+            velocity = (pVelocity*w).sum(-1)
 
-
-        # ofValue-of
-        seOF = (ofValue-ofRefinedGTBatch).pow(2).sum()
-        seVelocity= (velocity-velocityBatch).pow(2).sum()
+            onsetTiming = F.softmax(gathered["onsetTiming"], dim=-1)
+            offsetTiming = F.softmax(gathered["offsetTiming"], dim=-1)
+            timingValues = self.timingIndexToValue(
+                    torch.arange(self.conf.structuredTimingBins, device=device))
+            ofValue = torch.stack([
+                    (onsetTiming*timingValues).sum(-1),
+                    (offsetTiming*timingValues).sum(-1),
+                    ], dim=-1)
+            seOF = (ofValue-ofRefinedGTBatch).pow(2).sum()
+            seVelocity= (velocity-velocityBatch).pow(2).sum()
 
         # print(ofValue[0], ofRefinedGTBatch[0])
         # print(ofValue[-1], ofRefinedGTBatch[-1])
@@ -537,7 +544,7 @@ class TransKun(torch.nn.Module):
     def transcribeFrames(self,framesBatch, forcedStartPos= None, velocityCriteron = "hamming", onsetBound = None, lastFrameIdx = None):
         device = framesBatch.device
         nBatch=  framesBatch.shape[0]
-        crfBatch, ctxBatch = self.processFramesBatch(framesBatch)
+        crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(framesBatch)
         nSymbols = len(self.targetMIDIPitch)
         nFrame = framesBatch.shape[-2]
 
@@ -577,17 +584,8 @@ class TransKun(torch.nn.Module):
 
         # then predict the attribute set
 
-        ctx_a_all, ctx_b_all, symIdx_all, scatterIdx_all = self.fetchIntervalFeaturesBatch(ctxBatch, intervalsBatch)
-
-
-        attributeInput = torch.cat([ctx_a_all,
-                                   ctx_b_all,
-                                   ctx_a_all*ctx_b_all,
-                                   ],dim = -1)
-
-
-
-        logitsVelocity = self.velocityPredictor(attributeInput)
+        gathered, _ = self.gatherStructuredAttributeLogits(attributeLogits, intervalsBatch)
+        logitsVelocity = gathered["velocity"]
         pVelocity = F.softmax(logitsVelocity, dim = -1)
 
         
@@ -635,14 +633,16 @@ class TransKun(torch.nn.Module):
 
 
 
-        ofValue, ofPresence = self.refinedOFPredictor(attributeInput).chunk(2, dim = -1)
-        # ofValue = torch.sigmoid(ofValue)-0.5
-        ofDist = torch.distributions.ContinuousBernoulli(logits=ofValue)
-
-        ofValue = (ofDist.mean-0.5)/0.99
-        ofValue = torch.clamp(ofValue, -0.5, 0.5)
-
-        ofPresence = ofPresence>0
+        onsetTiming = torch.argmax(gathered["onsetTiming"], dim=-1)
+        offsetTiming = torch.argmax(gathered["offsetTiming"], dim=-1)
+        ofValue = torch.stack([
+                self.timingIndexToValue(onsetTiming),
+                self.timingIndexToValue(offsetTiming),
+                ], dim=-1)
+        ofPresence = torch.stack([
+                torch.argmax(gathered["onsetPresence"], dim=-1).bool(),
+                torch.argmax(gathered["offsetPresence"], dim=-1).bool(),
+                ], dim=-1)
 
 
 
