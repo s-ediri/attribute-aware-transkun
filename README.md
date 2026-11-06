@@ -191,6 +191,23 @@ Then we call the training script.
 python3 -m transkun.train -h
 ```
 
+To fine-tune the packaged V2 checkpoint with the structured-attribute model,
+pass `--pretrainedCheckpoint` and use a new filename for the training
+checkpoint. Compatible backbone and interval-scorer weights are loaded; the
+new structured-attribute head keeps its neutral initialization and is trained
+from the MAESTRO annotations. This option is only for starting a new run; omit
+it when resuming an existing training checkpoint.
+
+```bash
+python3 -m transkun.train checkpoint/structured-attributes.pt \
+  --nProcess 1 \
+  --datasetPath datasets/maestro-v3.0.0 \
+  --datasetMetaFile_train data/maestro-metadata/train.pickle \
+  --datasetMetaFile_val data/maestro-metadata/val.pickle \
+  --modelConf transkun/pretrained/2.0.conf \
+  --pretrainedCheckpoint transkun/pretrained/2.0.pt
+```
+
 ## The Evaluation Module
 
 ### Comparing the output MIDI files and the groundtruth MIDI files

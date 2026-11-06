@@ -66,6 +66,53 @@ def load_state_dict_tolerant(model, state_dict):
     model.load_state_dict(model_dict)
 
 
+def load_pretrained_weights(model, filename, device):
+    checkpoint = torch.load(filename, map_location=device)
+    if not isinstance(checkpoint, dict):
+        raise ValueError("Pretrained checkpoint must contain a state dictionary.")
+
+    state_dict = checkpoint.get(
+            "best_state_dict", checkpoint.get("state_dict", checkpoint))
+    if not isinstance(state_dict, dict) or not state_dict:
+        raise ValueError("Pretrained checkpoint does not contain model weights.")
+
+    model_dict = model.state_dict()
+    compatible = {
+            key: value for key, value in state_dict.items()
+            if key in model_dict
+            and isinstance(value, torch.Tensor)
+            and model_dict[key].shape == value.shape
+            }
+
+    required_prefixes = ["backbone."]
+    if any(key.startswith("scorer.") for key in model_dict):
+        required_prefixes.append("scorer.")
+    elif any(key.startswith("scorerProj.") for key in model_dict):
+        required_prefixes.append("scorerProj.")
+
+    missing_required = [
+            key for key in model_dict
+            if any(key.startswith(prefix) for prefix in required_prefixes)
+            and key not in compatible
+            ]
+    if missing_required:
+        raise ValueError(
+                "Pretrained checkpoint is missing compatible core model "
+                f"weights: {missing_required[:10]}")
+
+    model.load_state_dict(compatible, strict=False)
+    missing = sorted(set(model_dict) - set(compatible))
+    ignored = sorted(set(state_dict) - set(compatible))
+    print(
+            f"Loaded {len(compatible)} pretrained tensors; "
+            f"initialized {len(missing)} model tensors; "
+            f"ignored {len(ignored)} checkpoint tensors.")
+    if missing:
+        print("Initialized model tensors:", ", ".join(missing))
+    if ignored:
+        print("Ignored checkpoint tensors:", ", ".join(ignored))
+
+
 def save_checkpoint(filename, epoch, nIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler):
     checkpoint = {
             #'conf':model.conf.__dict__,
@@ -117,13 +164,16 @@ def initializeCheckpoint(Model,
                          max_lr,
                          weight_decay,
                          nIter,
-                         conf):
+                         conf,
+                         pretrainedCheckpoint=None):
 
     # conf = Model.Config()
     # if confDict is not None:
         # conf.__dict__ = confDict
 
     model = Model(conf).to(device)
+    if pretrainedCheckpoint is not None:
+        load_pretrained_weights(model, pretrainedCheckpoint, device)
 
     optimizerGroup = getOptimizerGroup(model)
 
@@ -270,5 +320,4 @@ def doValidation(model, dataset, parallel, device):
 
 
     return {"meanNLL": meanNLLPerSecond, "precision": precision, "recall":recall, "f1": f1}
-
 

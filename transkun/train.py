@@ -21,6 +21,16 @@ import argparse
 import moduleconf
 
 def train(workerId, nWorker, filename, runSeed, args):
+    if args.pretrainedCheckpoint is not None:
+        if os.path.exists(filename):
+            raise FileExistsError(
+                    "Cannot initialize from pretrained weights because the "
+                    f"training checkpoint already exists: {filename}")
+        if not os.path.isfile(args.pretrainedCheckpoint):
+            raise FileNotFoundError(
+                    "Pretrained checkpoint not found: "
+                    f"{args.pretrainedCheckpoint}")
+
     parallel = True
     if nWorker == 1:
         parallel = False
@@ -61,7 +71,8 @@ def train(workerId, nWorker, filename, runSeed, args):
                                 max_lr= args.max_lr,
                                 weight_decay = args.weight_decay,
                                 nIter = args.nIter,
-                                conf = conf)
+                                conf = conf,
+                                pretrainedCheckpoint=args.pretrainedCheckpoint)
 
 
             save_checkpoint(filename, startEpoch, startIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
@@ -380,6 +391,9 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', default = 1e-4, type=float)
     parser.add_argument('--nIter', default= 180000,type = int)
     parser.add_argument('--modelConf', required=True, help = "the path to the model conf file")
+    parser.add_argument(
+            '--pretrainedCheckpoint',
+            help="initialize compatible model weights from a pretrained checkpoint")
     parser.add_argument('--augment',  action ="store_true", help="do data augmentation")
     parser.add_argument('--noiseFolder',  required = False)
     parser.add_argument('--irFolder',  required = False)
@@ -401,4 +415,3 @@ if __name__ == '__main__':
         train(0, 1, saved_filename, runSeed, args)
     else:
         mp.spawn(fn=train, args=(num_processes, saved_filename, runSeed, args),  nprocs = num_processes, join=True, daemon=False)
-
