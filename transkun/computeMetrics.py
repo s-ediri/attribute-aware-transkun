@@ -41,15 +41,10 @@ def eval(args):
 
     # realign
     onsetDev = [d[1] for d in metrics["deviations"]]
-    offsetDev = [d[2] for d in metrics["deviations"]]
-    meanOnsetDev = sum(onsetDev)/len(onsetDev)
-    meanOffsetDev = sum(offsetDev)/len(offsetDev)
 
-
-    medianOnsetDev = statistics.median(onsetDev)
-    maxDevOnset = max(max(onsetDev), -min(onsetDev))
-
-    if alignOnset:
+    if alignOnset and onsetDev:
+        medianOnsetDev = statistics.median(onsetDev)
+        maxDevOnset = max(max(onsetDev), -min(onsetDev))
         
         for n in notesGT:
             n.start += maxDevOnset - medianOnsetDev
@@ -74,7 +69,10 @@ def eval(args):
 
 
         # recompute
-    metrics = Evaluation.compareTranscription(notesEst, notesGT, splitPedal=True, computeDeviations= computeDeviations)
+    metrics = Evaluation.compareTranscription(
+            notesEst, notesGT, splitPedal=True,
+            computeDeviations=computeDeviations,
+            onset_tolerance=onsetTolerance)
 
     # for name in metrics:
     # print(metrics, audioName)
@@ -146,7 +144,7 @@ def main():
     else:
             metricsAll = list(
                     tqdm.tqdm(
-                    map(eval, [(_, estPath, gtPath, extendPedal, computeDeviations, pedalOffset, alignOnset, dither, extendPedalEs, onsetTolerancet) for _ in filenames]),
+                    map(eval, [(_, estPath, gtPath, extendPedal, computeDeviations, pedalOffset, alignOnset, dither, extendPedalEst, onsetTolerance) for _ in filenames]),
                     total = len(filenames)
                     ))
 
@@ -171,10 +169,11 @@ def main():
             devAll = sum(aggDict[key], [])
             dev_onset = np.array([_[1] for _ in devAll])
             dev_offset = np.array([_[2] for _ in devAll])
-            onset_result =  scipy.stats.anderson(dev_onset)
-            offset_result=  scipy.stats.anderson(dev_offset)
-            resultAgg["deviation_onset_normality"]= onset_result.statistic
-            resultAgg["deviation_offset_normality"]= offset_result.statistic
+            if dev_onset.size >= 8 and dev_offset.size >= 8:
+                onset_result =  scipy.stats.anderson(dev_onset)
+                offset_result=  scipy.stats.anderson(dev_offset)
+                resultAgg["deviation_onset_normality"]= onset_result.statistic
+                resultAgg["deviation_offset_normality"]= offset_result.statistic
 
         else:
             tmp = np.array(aggDict[key])
