@@ -82,11 +82,18 @@ def train(workerId, nWorker, filename, runSeed, args):
         
 
     startEpoch, startIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler= load_checkpoint(TransKun, conf, filename,device)
-    print("#{} loaded".format(workerId))
-
+    print(
+            "Worker {} loaded checkpoint at step {}/{}.".format(
+                    workerId, startIter, args.nIter))
+    if startIter >= args.nIter:
+        if workerId == 0:
+            print(f"Training already reached the requested {args.nIter} steps.")
+        if parallel:
+            dist.destroy_process_group()
+        return
 
     if workerId == 0:
-        print("loading dataset....")
+        print("Loading training and validation datasets...")
 
     datasetPath = args.datasetPath
     datasetPicklePath = args.datasetMetaFile_train
@@ -95,7 +102,7 @@ def train(workerId, nWorker, filename, runSeed, args):
     dataset = Data.DatasetMaestro(datasetPath, datasetPicklePath)
     datasetVal = Data.DatasetMaestro(datasetPath, datasetPicklePath_val)
 
-    print("#{} loaded".format(workerId))
+    print("Worker {} loaded datasets.".format(workerId))
 
 
     if workerId == 0:
@@ -124,6 +131,11 @@ def train(workerId, nWorker, filename, runSeed, args):
     if args.augment:
         augmentator = Data.AugmentatorAudiomentations(sampleRate=44100, noiseFolder = args.noiseFolder, convIRFolder = args.irFolder)
 
+    dataLoaderOptions = {"num_workers": args.dataLoaderWorkers}
+    if args.dataLoaderWorkers > 0:
+        dataLoaderOptions["prefetch_factor"] = max(4, args.dataLoaderWorkers)
+
+    trainingComplete = False
     for epoc in range(startEpoch, 1000000):
         # average length will be chunkSize
         dataIter = Data.DatasetMaestroIterator(dataset, hopSize, chunkSize, seed = epoc*100+runSeed, augmentator = augmentator, notesStrictlyContained=False)
@@ -132,9 +144,9 @@ def train(workerId, nWorker, filename, runSeed, args):
             sampler = torch.utils.data.distributed.DistributedSampler(dataIter)
             sampler.set_epoch(epoc)
             # dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn, num_workers=args.dataLoaderWorkers, sampler = sampler, drop_last = True, prefetch_factor = 3)
-            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, num_workers=args.dataLoaderWorkers, sampler = sampler, drop_last = True, prefetch_factor = max(4, args.dataLoaderWorkers))
+            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, sampler = sampler, drop_last = True, **dataLoaderOptions)
         else:
-            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, num_workers=args.dataLoaderWorkers, shuffle=True, dropout_last=True, prefetch_factor = max(4, args.dataLoaderWorkers))
+            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, shuffle=True, drop_last=True, **dataLoaderOptions)
 
 
         lossAll = []
@@ -267,18 +279,31 @@ def train(workerId, nWorker, filename, runSeed, args):
 
             if workerId == 0:
                 t2 = time.time()
-                print("epoch:{} progress:{:0.3f} step:{}  loss:{:0.4f} gradNorm:{:0.2f} clipValue:{:0.2f} time:{:0.2f} ".format(epoc , idx/len(dataloader), 0,loss.item(),totalNorm.item(), curClipValue, t2-t1))
+                print(
+                        "epoch:{} progress:{:.1f}% step:{}/{} "
+                        "lossPerSecond:{:.4f} learningRate:{:.2e} "
+                        "gradNorm:{:.2f} clipThreshold:{:.2f} batchTime:{:.2f}s".format(
+                                epoc + 1,
+                                100 * (idx + 1) / len(dataloader),
+                                globalStep + 1, args.nIter, loss.item(),
+                                currentLR, totalNorm.item(), curClipValue, t2 - t1))
                 writer.add_scalar(f'Loss/train', loss.item(), globalStep)
                 writer.add_scalar(f'Optimizer/gradNorm', totalNorm.item(), globalStep)
                 writer.add_scalar(f'Optimizer/clipValue', curClipValue, globalStep)
                 if computeStats:
-                    nGT = totalGT.item()+1e-4
-                    nEst = totalEst.item()+1e-4
-                    nCorrect = totalCorrect.item()+1e-4
+                    nGTCount = totalGT.item()
+                    nEstCount = totalEst.item()
+                    nCorrectCount = totalCorrect.item()
+                    nGT = nGTCount + 1e-4
+                    nEst = nEstCount + 1e-4
+                    nCorrect = nCorrectCount + 1e-4
                     precision = nCorrect/nEst
                     recall = nCorrect/nGT
                     f1 = 2* precision*recall/(precision+recall)              
-                    print("nGT:{} nEst:{} nCorrect:{}".format(nGT, nEst, nCorrect))
+                    print(
+                            "Note+offset counts: groundTruth={:.1f} "
+                            "estimated={:.1f} matched={:.1f}".format(
+                                    nGTCount, nEstCount, nCorrectCount))
                     
                     
                     writer.add_scalar(f'Loss/train_f1', f1, globalStep)
@@ -300,9 +325,16 @@ def train(workerId, nWorker, filename, runSeed, args):
                     writer.add_scalar(f'Loss/train_recall_frame', recallFrame, globalStep)
                     writer.add_scalar(f'Loss/train_mse_velocity', mseVelocity, globalStep)
                     writer.add_scalar(f'Loss/train_mse_OF', mseOF, globalStep)
-                    print("f1:{} precision:{} recall:{}".format(f1, precision, recall))
-                    print("f1Frame:{} precisionFrame:{} recallFrame:{}".format(f1Frame, precisionFrame, recallFrame))
-                    print("mseVelocity:{} mseOF:{}".format(mseVelocity, mseOF))
+                    print(
+                            "Note+offset: F1={:.4f} precision={:.4f} "
+                            "recall={:.4f}".format(f1, precision, recall))
+                    print(
+                            "Framewise: F1={:.4f} precision={:.4f} "
+                            "recall={:.4f}".format(
+                                    f1Frame, precisionFrame, recallFrame))
+                    print(
+                            "Attribute MSE: velocity={:.4f} "
+                            "onsetOffsetTiming={:.4f}".format(mseVelocity, mseOF))
 
 
 
@@ -314,14 +346,21 @@ def train(workerId, nWorker, filename, runSeed, args):
 
                 if idx%2000 ==1999:
                     save_checkpoint(filename, epoc+1, globalStep+1, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
-                    print("saved")
+                    print(
+                            "Checkpoint saved at step {}/{}: {}".format(
+                                    globalStep + 1, args.nIter, filename))
 
             globalStep+= 1
+            if globalStep >= args.nIter:
+                trainingComplete = True
+                break
             # torch.cuda.empty_cache()
 
 
         if workerId == 0:
-            print("Validating...")
+            print(
+                    "Validating after epoch {} at step {}/{}...".format(
+                            epoc + 1, globalStep, args.nIter))
         # let's do validation
         torch.cuda.empty_cache()
         
@@ -347,22 +386,34 @@ def train(workerId, nWorker, filename, runSeed, args):
         if workerId == 0:
             lossAveraged = sum(lossAll)/len(lossAll)
             lossAll = []
+            previousBestF1 = max(lossTracker['val'], default=float("-inf"))
             lossTracker['train'].append(lossAveraged)
             lossTracker['val'].append(f1)
 
-            print('result:', valResult)
+            print(
+                    "Validation result (epoch {}, step {}/{}): {}".format(
+                            epoc + 1, globalStep, args.nIter, valResult))
 
             for key in valResult:
                 writer.add_scalar('val/'+ key, valResult[key], epoc)
 
-            if f1 >= max(lossTracker['val'])*1.00:
-                print('best updated')
+            if f1 >= previousBestF1:
                 best_state_dict = copy.deepcopy(model.state_dict())
+                print(
+                        "Best checkpoint updated at step {} "
+                        "(validation F1={:.4f}).".format(globalStep, f1))
 
-            save_checkpoint(filename, epoc+1, globalStep+1, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+            save_checkpoint(filename, epoc+1, globalStep, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+
+        if trainingComplete:
+            break
+
+    if workerId == 0:
+        writer.close()
+    if parallel:
+        dist.destroy_process_group()
 
 
-    
     
 
 if __name__ == '__main__':
@@ -402,11 +453,19 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-
-    
     num_processes = args.nProcess
     saved_filename = args.saved_filename
 
+    if args.nIter < 1:
+        parser.error("--nIter must be a positive number of optimizer steps")
+    if args.pretrainedCheckpoint is not None:
+        if not os.path.isfile(args.pretrainedCheckpoint):
+            parser.error(
+                    f"Pretrained checkpoint not found: {args.pretrainedCheckpoint}")
+        if os.path.exists(saved_filename):
+            parser.error(
+                    "Pretrained initialization requires a new training "
+                    f"checkpoint path: {saved_filename}")
 
     runSeed = int(time.time())
 

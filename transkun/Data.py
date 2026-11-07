@@ -345,11 +345,10 @@ def createDatasetMaestroCSV(datasetPath, datasetMetaCSVPath, extendSustainPedal=
 
     samplesAll = []
 
-    with datasetMetaCSVPath.open() as f:
+    with datasetMetaCSVPath.open(encoding="utf-8-sig", newline="") as f:
         # metaInfo = json.load(f)
         metaInfo = csv.DictReader(f)
         for e in metaInfo:
-            print(e)
             midiPath = os.path.join(datasetPath, e["midi_filename"])
             audioPath = os.path.join(datasetPath, e["audio_filename"])
             

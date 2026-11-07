@@ -31,7 +31,7 @@ MANIFEST
 #Data
 datasets/
 examples/
-
+checkpoint/
 
 
 # PyInstaller

@@ -196,14 +196,30 @@ pass `--pretrainedCheckpoint` and use a new filename for the training
 checkpoint. Compatible backbone and interval-scorer weights are loaded; the
 new structured-attribute head keeps its neutral initialization and is trained
 from the MAESTRO annotations. This option is only for starting a new run; omit
-it when resuming an existing training checkpoint.
+it when resuming an existing training checkpoint. `--nIter` is the maximum
+number of optimizer steps; training validates and saves the checkpoint at that
+step before exiting. Set `--dataLoaderWorkers 0` if worker-side WAV memory
+mapping exhausts the Windows paging file.
+
+After resampling the 2017 and 2018 MAESTRO audio to 44.1 kHz, generate
+no-pedal-extension metadata with:
+
+```bash
+python3 -m transkun.createDatasetMaestro --noPedalExtension \
+  datasets/maestro-v3.0.0-44100 \
+  datasets/maestro-v3.0.0-44100/maestro-v3.0.0.csv \
+  datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension
+```
+
+The training copy should preserve the original manifest-relative directory
+layout; keep the original dataset unchanged.
 
 ```bash
 python3 -m transkun.train checkpoint/structured-attributes.pt \
   --nProcess 1 \
-  --datasetPath datasets/maestro-v3.0.0 \
-  --datasetMetaFile_train data/maestro-metadata/train.pickle \
-  --datasetMetaFile_val data/maestro-metadata/val.pickle \
+  --datasetPath datasets/maestro-v3.0.0-44100 \
+  --datasetMetaFile_train datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle \
+  --datasetMetaFile_val datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle \
   --modelConf transkun/pretrained/2.0.conf \
   --pretrainedCheckpoint transkun/pretrained/2.0.pt
 ```
