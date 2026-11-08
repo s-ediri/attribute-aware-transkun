@@ -54,6 +54,17 @@ class PretrainedInitializationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "core model weights"):
                 load_pretrained_weights(model, checkpoint_path, "cpu")
 
+    def test_strict_loading_rejects_missing_or_extra_tensors(self):
+        model = SmallModel()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            checkpoint_path = Path(temp_dir) / "partial.pt"
+            torch.save({"state_dict": {"backbone.weight": model.backbone.weight}},
+                       checkpoint_path)
+
+            with self.assertRaises(RuntimeError):
+                load_pretrained_weights(
+                    model, checkpoint_path, "cpu", strict=True)
+
 
 if __name__ == "__main__":
     unittest.main()

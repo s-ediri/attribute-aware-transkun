@@ -66,8 +66,8 @@ def load_state_dict_tolerant(model, state_dict):
     model.load_state_dict(model_dict)
 
 
-def load_pretrained_weights(model, filename, device):
-    checkpoint = torch.load(filename, map_location=device)
+def load_pretrained_weights(model, filename, device, strict=False):
+    checkpoint = torch.load(filename, map_location=device, weights_only=False)
     if not isinstance(checkpoint, dict):
         raise ValueError("Pretrained checkpoint must contain a state dictionary.")
 
@@ -75,6 +75,13 @@ def load_pretrained_weights(model, filename, device):
             "best_state_dict", checkpoint.get("state_dict", checkpoint))
     if not isinstance(state_dict, dict) or not state_dict:
         raise ValueError("Pretrained checkpoint does not contain model weights.")
+
+    if strict:
+        model.load_state_dict(state_dict, strict=True)
+        print(
+                "Strictly loaded {} pretrained tensors from {}.".format(
+                    len(state_dict), filename))
+        return
 
     model_dict = model.state_dict()
     compatible = {
@@ -113,7 +120,8 @@ def load_pretrained_weights(model, filename, device):
         print("Ignored checkpoint tensors:", ", ".join(ignored))
 
 
-def save_checkpoint(filename, epoch, nIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler):
+def save_checkpoint(filename, epoch, nIter, model, lossTracker,
+                    best_state_dict, optimizer, lrScheduler, metadata=None):
     checkpoint = {
             #'conf':model.conf.__dict__,
             'state_dict': model.state_dict(), 
@@ -122,7 +130,8 @@ def save_checkpoint(filename, epoch, nIter, model,  lossTracker, best_state_dict
             'nIter': nIter,
             'loss_tracker': lossTracker,
             'optimizer_state_dict': optimizer.state_dict(),
-            'lr_scheduler_state_dict': lrScheduler.state_dict()
+            'lr_scheduler_state_dict': lrScheduler.state_dict(),
+            'metadata': copy.deepcopy(metadata) if metadata is not None else {}
             }
     torch.save(checkpoint, filename)
 
@@ -165,7 +174,8 @@ def initializeCheckpoint(Model,
                          weight_decay,
                          nIter,
                          conf,
-                         pretrainedCheckpoint=None):
+                         pretrainedCheckpoint=None,
+                         strictPretrained=False):
 
     # conf = Model.Config()
     # if confDict is not None:
@@ -173,7 +183,8 @@ def initializeCheckpoint(Model,
 
     model = Model(conf).to(device)
     if pretrainedCheckpoint is not None:
-        load_pretrained_weights(model, pretrainedCheckpoint, device)
+        load_pretrained_weights(
+                model, pretrainedCheckpoint, device, strict=strictPretrained)
 
     optimizerGroup = getOptimizerGroup(model)
 
@@ -200,7 +211,7 @@ def initializeCheckpoint(Model,
     
 
 def load_checkpoint(Model, conf, filename,device, strict=False):
-    checkpoint = torch.load(filename, map_location=device)
+    checkpoint = torch.load(filename, map_location=device, weights_only=False)
 
     startEpoch = checkpoint['epoch']
     startIter = checkpoint['nIter']

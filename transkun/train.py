@@ -19,6 +19,9 @@ from .TrainUtil import *
 import argparse
 
 import moduleconf
+import hashlib
+import pathlib
+import subprocess
 
 
 def seed_everything(seed, worker_id=0):
@@ -30,6 +33,116 @@ def seed_everything(seed, worker_id=0):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(process_seed)
     return process_seed
+
+
+def sha256_file(filename):
+    digest = hashlib.sha256()
+    with open(filename, "rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def current_git_revision():
+    repository_root = pathlib.Path(__file__).resolve().parents[1]
+    try:
+        revision = subprocess.run(
+                ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
+                check=True, capture_output=True, text=True).stdout.strip()
+        dirty = bool(subprocess.run(
+                ["git", "-C", str(repository_root), "status", "--porcelain"],
+                check=True, capture_output=True, text=True).stdout.strip())
+        return {"commit": revision, "dirty": dirty}
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": None, "dirty": None}
+
+
+def build_run_metadata(args, model_module, model_config, seed):
+    """Build the immutable run description stored in every new checkpoint."""
+    paths = {
+        "model_config": args.modelConf,
+        "train_metadata": args.datasetMetaFile_train,
+        "validation_metadata": args.datasetMetaFile_val,
+        "pretrained_checkpoint": args.pretrainedCheckpoint,
+    }
+    files = {}
+    for name, filename in paths.items():
+        if filename is not None:
+            files[name] = {
+                "path": str(pathlib.Path(filename).resolve()),
+                "sha256": sha256_file(filename),
+            }
+
+    return {
+        "schema_version": 1,
+        "system_id": args.systemId,
+        "seed": int(seed),
+        "model_module": model_module,
+        "model_config": copy.deepcopy(model_config.__dict__),
+        "training": {
+            "n_processes": args.nProcess,
+            "batch_size": args.batchSize,
+            "hop_size_seconds": args.hopSize,
+            "chunk_size_seconds": args.chunkSize,
+            "data_loader_workers": args.dataLoaderWorkers,
+            "max_learning_rate": args.max_lr,
+            "weight_decay": args.weight_decay,
+            "optimizer_steps": args.nIter,
+            "augmentation": bool(args.augment),
+            "strict_pretrained": bool(args.strictPretrained),
+            "pedal_extension": False,
+        },
+        "dataset_root": str(pathlib.Path(args.datasetPath).resolve()),
+        "files": files,
+        "git": current_git_revision(),
+    }
+
+
+def resolve_run_metadata(filename, proposed):
+    """Preserve initialization provenance and reject incompatible resumes."""
+    if not os.path.exists(filename):
+        return proposed
+
+    checkpoint = torch.load(filename, map_location="cpu", weights_only=False)
+    saved = checkpoint.get("metadata", {})
+    if not saved:
+        raise ValueError(
+                "Existing checkpoint has no reproducibility metadata and "
+                "cannot be resumed by the controlled experiment workflow: "
+                f"{filename}")
+
+    saved_training = dict(saved.get("training", {}))
+    proposed_training = dict(proposed.get("training", {}))
+    # Initialization strictness is provenance for a new run, not a resume
+    # setting. A resume intentionally omits --pretrainedCheckpoint and
+    # --strictPretrained because it restores the saved optimizer/model state.
+    saved_training.pop("strict_pretrained", None)
+    proposed_training.pop("strict_pretrained", None)
+
+    comparisons = {
+        "system_id": (saved.get("system_id"), proposed.get("system_id")),
+        "seed": (saved.get("seed"), proposed.get("seed")),
+        "model_module": (saved.get("model_module"), proposed.get("model_module")),
+        "model_config": (saved.get("model_config"), proposed.get("model_config")),
+        "training": (saved_training, proposed_training),
+        "dataset_root": (saved.get("dataset_root"), proposed.get("dataset_root")),
+        "model_config_file": (
+            saved.get("files", {}).get("model_config"),
+            proposed.get("files", {}).get("model_config")),
+        "train_metadata_file": (
+            saved.get("files", {}).get("train_metadata"),
+            proposed.get("files", {}).get("train_metadata")),
+        "validation_metadata_file": (
+            saved.get("files", {}).get("validation_metadata"),
+            proposed.get("files", {}).get("validation_metadata")),
+    }
+    mismatches = [
+        name for name, (old, new) in comparisons.items() if old != new]
+    if mismatches:
+        raise ValueError(
+                "Resume arguments do not match checkpoint metadata for: "
+                + ", ".join(mismatches))
+    return saved
 
 
 def train(workerId, nWorker, filename, runSeed, args):
@@ -67,6 +180,13 @@ def train(workerId, nWorker, filename, runSeed, args):
     confManager = moduleconf.parseFromFile(args.modelConf)
     TransKun = confManager["Model"].module.TransKun
     conf = confManager["Model"].config
+    modelModule = confManager["Model"].module.__name__
+    if args.hopSize is None:
+        args.hopSize = conf.segmentHopSizeInSecond
+    if args.chunkSize is None:
+        args.chunkSize = conf.segmentSizeInSecond
+    runMetadata = build_run_metadata(args, modelModule, conf, runSeed)
+    runMetadata = resolve_run_metadata(filename, runMetadata)
 
 
 
@@ -83,10 +203,14 @@ def train(workerId, nWorker, filename, runSeed, args):
                                 weight_decay = args.weight_decay,
                                 nIter = args.nIter,
                                 conf = conf,
-                                pretrainedCheckpoint=args.pretrainedCheckpoint)
+                                pretrainedCheckpoint=args.pretrainedCheckpoint,
+                                strictPretrained=args.strictPretrained)
 
 
-            save_checkpoint(filename, startEpoch, startIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+            save_checkpoint(
+                    filename, startEpoch, startIter, model, lossTracker,
+                    best_state_dict, optimizer, lrScheduler,
+                    metadata=runMetadata)
 
     if parallel:
         dist.barrier()
@@ -126,15 +250,8 @@ def train(workerId, nWorker, filename, runSeed, args):
     # this iterator should be constructed each time
     batchSize = args.batchSize
 
-    if args.hopSize is None:
-        hopSize = conf.segmentHopSizeInSecond
-    else:
-        hopSize = args.hopSize
-
-    if args.chunkSize is None:
-        chunkSize =  conf.segmentSizeInSecond
-    else:
-        chunkSize = args.chunkSize
+    hopSize = args.hopSize
+    chunkSize = args.chunkSize
 
     gradNormHist = MovingBuffer(initValue = 40, maxLen = 10000)
 
@@ -356,7 +473,10 @@ def train(workerId, nWorker, filename, runSeed, args):
 
 
                 if idx%2000 ==1999:
-                    save_checkpoint(filename, epoc+1, globalStep+1, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+                    save_checkpoint(
+                            filename, epoc+1, globalStep+1, model, lossTracker,
+                            best_state_dict, optimizer, lrScheduler,
+                            metadata=runMetadata)
                     print(
                             "Checkpoint saved at step {}/{}: {}".format(
                                     globalStep + 1, args.nIter, filename))
@@ -414,7 +534,10 @@ def train(workerId, nWorker, filename, runSeed, args):
                         "Best checkpoint updated at step {} "
                         "(validation F1={:.4f}).".format(globalStep, f1))
 
-            save_checkpoint(filename, epoc+1, globalStep, model,  lossTracker, best_state_dict, optimizer, lrScheduler)
+            save_checkpoint(
+                    filename, epoc+1, globalStep, model, lossTracker,
+                    best_state_dict, optimizer, lrScheduler,
+                    metadata=runMetadata)
 
         if trainingComplete:
             break
@@ -457,8 +580,14 @@ if __name__ == '__main__':
             help="declared run seed used for model, data-order, and worker RNGs")
     parser.add_argument('--modelConf', required=True, help = "the path to the model conf file")
     parser.add_argument(
+            '--systemId', required=True,
+            help="protocol system identifier, for example B, C, or D")
+    parser.add_argument(
             '--pretrainedCheckpoint',
             help="initialize compatible model weights from a pretrained checkpoint")
+    parser.add_argument(
+            '--strictPretrained', action="store_true",
+            help="require an exact state-dict match when initializing")
     parser.add_argument('--augment',  action ="store_true", help="do data augmentation")
     parser.add_argument('--noiseFolder',  required = False)
     parser.add_argument('--irFolder',  required = False)
@@ -480,6 +609,8 @@ if __name__ == '__main__':
             parser.error(
                     "Pretrained initialization requires a new training "
                     f"checkpoint path: {saved_filename}")
+    elif args.strictPretrained:
+        parser.error("--strictPretrained requires --pretrainedCheckpoint")
 
     runSeed = args.seed
 

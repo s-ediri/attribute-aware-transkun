@@ -1,0 +1,42 @@
+{
+  "protocol": "research/PROTOCOL.md",
+  "dataset": {
+    "root": "datasets/maestro-v3.0.0-44100",
+    "train_metadata": "datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle",
+    "train_metadata_sha256": "2fff5f2f45e479b545b8f9b892464ca2861664a241644be2433ff088872ad118",
+    "validation_metadata": "datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle",
+    "validation_metadata_sha256": "56f5aa73449e3be90180ab7e45ceebad9b0710d4027a2be5b03827db6de06223",
+    "pedal_extension": false
+  },
+  "initialization": {
+    "checkpoint": "transkun/pretrained/2.0.pt",
+    "sha256": "50a80010effc2a59ffcd068a95cd2b29bd7f23a27a3515bc3ccd209c89a3d44c"
+  },
+  "matched_training": {
+    "n_processes": 1,
+    "batch_size": 1,
+    "data_loader_workers": 2,
+    "max_learning_rate": 0.0002,
+    "weight_decay": 0.0001,
+    "optimizer_steps": 10000,
+    "augmentation": false,
+    "seeds": [20261108, 20261109, 20261110]
+  },
+  "systems": {
+    "B": {
+      "description": "Original TransKun V2 architecture, equally fine-tuned",
+      "config": "experiments/configs/legacy_finetune.conf",
+      "strict_pretrained": true
+    },
+    "C": {
+      "description": "Trained structured heads with post-hoc decoding",
+      "config": "experiments/configs/posthoc_attributes.conf",
+      "strict_pretrained": false
+    },
+    "D": {
+      "description": "Attribute-aware structured decoding",
+      "config": "experiments/configs/joint_attributes.conf",
+      "strict_pretrained": false
+    }
+  }
+}

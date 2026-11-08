@@ -29,8 +29,9 @@ attributes without allowing them to affect interval selection?
 | D | Structured heads with loss weight 1 and score weight 1 | Attribute-aware joint decoding |
 
 The key method contrast is **D minus C**. The contrast **B minus A** measures
-continued fine-tuning. System B requires a maintained legacy-model training
-entry point and must be implemented before confirmatory training begins.
+continued fine-tuning. System B uses the maintained historical architecture in
+`transkun/ModelTransformerLegacy.py`, sourced from commit `03b23776`, and must
+strictly load the packaged checkpoint.
 
 ## Fixed training conventions for the first comparison
 
@@ -105,7 +106,7 @@ hyperparameter or architecture sweep is outside the planned scope.
 ## Immediate milestones
 
 1. Complete and validate the existing 137-piece full-recording robustness run.
-2. Implement and test the equally fine-tunable legacy TransKun control (B).
-3. Run short smoke tests for C and D using identical declared seeds.
+2. Run matched short smoke tests for B, C, and D using identical declared seeds.
+3. Verify checkpoint metadata and strict initialization before full runs.
 4. Add direct attribute accuracy and calibration evaluation.
 5. Freeze the final training/evaluation manifest before multi-seed runs.

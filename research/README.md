@@ -3,7 +3,11 @@
 - `PROTOCOL.md` defines the current thesis question, controlled systems,
   outcomes, data-use rules, and progression criteria.
 - `../experiments/configs/` contains tracked model configurations.
+- `../experiments/manifests/phase1.json` freezes the matched B/C/D training
+  settings, seeds, dataset metadata hashes, and initialization checkpoint hash.
 - `../scripts/` contains reproducible evaluation drivers.
+- `../scripts/smoke_training_step.py` runs one forward/backward step without
+  updating weights and should pass for B, C, and D before full training.
 - `../checkpoint/` is intentionally local and ignored; it contains large model
   checkpoints, predictions, TensorBoard logs, and generated metric files.
 - `../datasets/` is intentionally local and ignored.

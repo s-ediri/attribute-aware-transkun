@@ -19,9 +19,29 @@ The first new control separates attribute supervision from structured decoding:
 
 - `joint_attributes.conf`: attribute loss weight `1`, decoding score weight `1`.
 - `posthoc_attributes.conf`: attribute loss weight `1`, decoding score weight `0`.
+- `legacy_finetune.conf`: original V2 post-hoc architecture for System B; use
+  `--strictPretrained` so the packaged checkpoint must match exactly.
+
+The matched Phase 1 settings and file hashes are frozen in
+`experiments/manifests/phase1.json`. Every new checkpoint stores the declared
+system ID, seed, configuration, data/checkpoint hashes, training budget, and Git
+revision under its `metadata` field.
 
 All new training runs must pass an explicit `--seed`; the planned final seeds
 are listed in the research protocol.
+
+A no-update real-data smoke step can be run before training. For System B:
+
+```powershell
+python scripts/smoke_training_step.py `
+  --system-id B `
+  --config experiments/configs/legacy_finetune.conf `
+  --dataset-path datasets/maestro-v3.0.0-44100 `
+  --metadata datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle `
+  --pretrained-checkpoint transkun/pretrained/2.0.pt `
+  --strict-pretrained `
+  --seed 20261108
+```
 
 
 This repo contains code for following papers for transcribing expressive piano performance into MIDI.
@@ -241,6 +261,7 @@ layout; keep the original dataset unchanged.
 python3 -m transkun.train checkpoint/structured-attributes.pt \
   --nProcess 1 \
   --seed 20261108 \
+  --systemId D \
   --datasetPath datasets/maestro-v3.0.0-44100 \
   --datasetMetaFile_train datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle \
   --datasetMetaFile_val datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle \
