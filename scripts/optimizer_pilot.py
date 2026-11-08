@@ -109,9 +109,9 @@ def restore_rng_state(state):
         raise ValueError("Pilot checkpoint has no RNG state for exact resume")
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    torch.set_rng_state(state["torch"].cpu())
     if state["cuda"] is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        torch.cuda.set_rng_state_all([item.cpu() for item in state["cuda"]])
 
 
 def load_or_initialize(args, model_class, model_config, device, metadata):

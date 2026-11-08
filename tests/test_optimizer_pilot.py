@@ -54,6 +54,13 @@ class OptimizerPilotTest(unittest.TestCase):
         actual = (random.random(), np.random.rand(), torch.rand(1).item())
         self.assertEqual(expected, actual)
 
+    @unittest.skipUnless(torch.cuda.is_available(), "CUDA is unavailable")
+    def test_rng_restore_accepts_device_mapped_torch_state(self):
+        state = capture_rng_state()
+        state["torch"] = state["torch"].cuda()
+        state["cuda"] = [item.cuda() for item in state["cuda"]]
+        restore_rng_state(state)
+
 
 if __name__ == "__main__":
     unittest.main()
