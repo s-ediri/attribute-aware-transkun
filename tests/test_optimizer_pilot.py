@@ -1,15 +1,22 @@
 import copy
 import random
+import tempfile
 import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 import torch
+from torch import nn
 
 from scripts.optimizer_pilot import (
     capture_rng_state,
+    load_or_initialize,
     restore_rng_state,
     validate_resume_metadata,
 )
+from transkun.TrainUtil import save_checkpoint
 
 
 class OptimizerPilotTest(unittest.TestCase):
@@ -60,6 +67,42 @@ class OptimizerPilotTest(unittest.TestCase):
         state["torch"] = state["torch"].cuda()
         state["cuda"] = [item.cuda() for item in state["cuda"]]
         restore_rng_state(state)
+
+    def create_components(self):
+        model = nn.Linear(2, 1)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer, max_lr=1e-3, total_steps=3)
+        return model, optimizer, scheduler
+
+    def test_resume_loader_preserves_loss_history(self):
+        model, optimizer, scheduler = self.create_components()
+        history = {"train": [3.0, 2.0], "val": []}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "checkpoint.pt"
+            save_checkpoint(
+                path, epoch=0, nIter=2, model=model,
+                lossTracker=history, best_state_dict=model.state_dict(),
+                optimizer=optimizer, lrScheduler=scheduler,
+                metadata=self.metadata())
+            checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+            checkpoint["rng_state"] = capture_rng_state()
+            torch.save(checkpoint, path)
+            new_model, new_optimizer, new_scheduler = self.create_components()
+            initialized = (
+                0, 0, new_model, {"train": [], "val": []},
+                new_model.state_dict(), new_optimizer, new_scheduler)
+            args = SimpleNamespace(
+                checkpoint=path, max_lr=1e-3, weight_decay=1e-4,
+                schedule_steps=3, pretrained_checkpoint=None,
+                strict_pretrained=False)
+            with mock.patch(
+                    "scripts.optimizer_pilot.initializeCheckpoint",
+                    return_value=initialized):
+                loaded = load_or_initialize(
+                    args, nn.Linear, object(), torch.device("cpu"),
+                    self.metadata())
+        self.assertEqual(loaded[3], history)
 
 
 if __name__ == "__main__":

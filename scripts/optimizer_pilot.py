@@ -119,7 +119,7 @@ def load_or_initialize(args, model_class, model_config, device, metadata):
         checkpoint = torch.load(args.checkpoint, map_location=device,
                                 weights_only=False)
         validate_resume_metadata(checkpoint.get("metadata"), metadata)
-        _, _, model, loss_tracker, best_state, optimizer, scheduler = \
+        _, _, model, _, best_state, optimizer, scheduler = \
             initializeCheckpoint(
                 model_class, device, args.max_lr, args.weight_decay,
                 args.schedule_steps, model_config)
@@ -127,6 +127,7 @@ def load_or_initialize(args, model_class, model_config, device, metadata):
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
         restore_rng_state(checkpoint.get("rng_state"))
+        loss_tracker = checkpoint["loss_tracker"]
         return (checkpoint["epoch"], checkpoint["nIter"], model,
                 loss_tracker, checkpoint["best_state_dict"], optimizer,
                 scheduler, True)
