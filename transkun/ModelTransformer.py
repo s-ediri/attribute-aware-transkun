@@ -59,7 +59,12 @@ class ModelConfig:
         # enough to score for every candidate interval in the semi-CRF.
         self.structuredAttributeHiddenSize = 256
         self.structuredTimingBins = 21
+        # Legacy joint weight retained for old configuration files. Explicit
+        # loss/score weights allow attributes to be trained without allowing
+        # them to influence semi-CRF interval selection.
         self.structuredAttributeWeight = 1.0
+        self.structuredAttributeLossWeight = None
+        self.structuredAttributeScoreWeight = None
         self.structuredOffsetScoreScale = 1.0
 
         self.scoringExpansionFactor = 4
@@ -187,9 +192,12 @@ class TransKun(torch.nn.Module):
 
     def addStructuredAttributeScores(self, crf, attributeLogits, offsetScoreScale=1.0):
         """Marginalize attribute labels into each semi-CRF interval score."""
+        weight = self.conf.structuredAttributeScoreWeight
+        if weight is None:
+            weight = self.conf.structuredAttributeWeight
         return add_attribute_scores(
-                crf, attributeLogits, self.conf.structuredAttributeWeight,
-                self.conf.structuredAttributeWeight * offsetScoreScale)
+                crf, attributeLogits, weight,
+                weight * offsetScoreScale)
 
     def timingValueToIndex(self, value):
         return timing_value_to_index(value, self.conf.structuredTimingBins)
@@ -204,10 +212,13 @@ class TransKun(torch.nn.Module):
 
     def structuredAttributeLogProb(self, gathered, velocity, timing, presence):
         """Observed-label score minus the label log-partition per interval."""
+        weight = self.conf.structuredAttributeLossWeight
+        if weight is None:
+            weight = self.conf.structuredAttributeWeight
         return attribute_log_prob(
                 gathered, velocity, timing, presence,
                 self.conf.structuredTimingBins,
-                self.conf.structuredAttributeWeight)
+                weight)
 
     def processFramesBatch(self, framesBatch, offsetScoreScale=1.0):
         

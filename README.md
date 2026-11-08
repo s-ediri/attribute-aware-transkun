@@ -1,4 +1,27 @@
-  # Piano Transcription with Neural Semi-CRF
+# Piano Transcription with Neural Semi-CRF
+
+## Thesis research extension
+
+This fork studies **attribute-aware structured decoding**: whether velocity,
+sub-frame timing, and boundary-presence evidence should participate in the
+semi-CRF decision about which note intervals exist. The controlled study and
+data-use rules are defined in [`research/PROTOCOL.md`](research/PROTOCOL.md).
+
+Tracked experiment configurations are under `experiments/configs/`. Large
+datasets, checkpoints, predictions, and generated metrics remain local and are
+ignored by Git. The validated lightweight test command is:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The first new control separates attribute supervision from structured decoding:
+
+- `joint_attributes.conf`: attribute loss weight `1`, decoding score weight `1`.
+- `posthoc_attributes.conf`: attribute loss weight `1`, decoding score weight `0`.
+
+All new training runs must pass an explicit `--seed`; the planned final seeds
+are listed in the research protocol.
 
 
 This repo contains code for following papers for transcribing expressive piano performance into MIDI.
@@ -51,7 +74,7 @@ In V2, as demonstrated in the ISMIR 2024 paper, the changes from V1 are:
 2. The Score module is simplified with Scaled Inner Product Interval Scaling. The noise score is now zero tensor for compatibility with V1.
 3. Segmentwise processing now handles incomplete events with a longer duration 
 
-The structured-attribute extension uses 128 velocity classes and configurable sub-frame timing bins (`structuredTimingBins`, 21 by default). `structuredAttributeWeight` controls the contribution of these factors to interval scoring. `structuredOffsetScoreScale` (default `1.0`) scales only the offset-timing and offset-presence factors during transcription; it is an inference-time ablation and does not change the training objective. Existing V2 checkpoints load with `strict=False`; the new head is initialized to an approximately neutral distribution and must be trained or fine-tuned before its attributes can guide interval selection.
+The structured-attribute extension uses 128 velocity classes and configurable sub-frame timing bins (`structuredTimingBins`, 21 by default). `structuredAttributeLossWeight` controls attribute supervision and `structuredAttributeScoreWeight` controls whether those factors influence interval decoding. If either is omitted, it falls back to the legacy `structuredAttributeWeight`. `structuredOffsetScoreScale` (default `1.0`) scales only the offset-timing and offset-presence factors during transcription; it is an inference-time ablation and does not change the training objective. Existing V2 checkpoints load with `strict=False`; the new head is initialized to an approximately neutral distribution and must be trained or fine-tuned before its attributes can guide interval selection.
 
 ## Basic Usage
 
@@ -217,6 +240,7 @@ layout; keep the original dataset unchanged.
 ```bash
 python3 -m transkun.train checkpoint/structured-attributes.pt \
   --nProcess 1 \
+  --seed 20261108 \
   --datasetPath datasets/maestro-v3.0.0-44100 \
   --datasetMetaFile_train datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle \
   --datasetMetaFile_val datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle \

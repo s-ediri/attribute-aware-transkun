@@ -1,5 +1,7 @@
-.pt
-.pickle
+# Local model/data artifacts. The packaged checkpoint is already tracked and
+# remains tracked even though new checkpoint files are ignored.
+*.pt
+*.pickle
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -28,12 +30,18 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-#Data
-datasets/
-examples/
-checkpoint/
-research-experiment-log.*
-20200345*
+# Local research data and generated outputs
+/data/
+/datasets/
+/examples/
+/checkpoint/
+/20200345*
+/research-results-thesis.pdf
+/texput.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
 
 
 # PyInstaller
@@ -168,5 +176,3 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
-research-experiment-log.pdf
-research-experiment-log.tex

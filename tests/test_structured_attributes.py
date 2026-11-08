@@ -78,6 +78,23 @@ class StructuredAttributeTest(unittest.TestCase):
         self.assertGreater(attributes["velocity"].grad.abs().sum().item(), 0)
         self.assertGreater(attributes["offsetTiming"].grad.abs().sum().item(), 0)
 
+    def test_attributes_can_train_without_changing_interval_scores(self):
+        attributes = _attribute_logits(3)
+        crf = CRF.NeuralSemiCRFInterval(
+            torch.zeros(3, 3, 1), torch.zeros(2, 1))
+
+        post_hoc = add_attribute_scores(crf, attributes, weight=0.0)
+        torch.testing.assert_close(post_hoc.score, crf.score)
+
+        gathered, _ = gather_attribute_logits(
+            attributes, [[[(0, 2)]]], n_symbols=1)
+        attribute_score = attribute_log_prob(
+            gathered, [64], [(0.0, 0.25)], [(True, True)],
+            n_timing_bins=5, weight=1.0)
+        (-attribute_score.sum()).backward()
+        for logits in attributes.values():
+            self.assertGreater(logits.grad.abs().sum().item(), 0)
+
     def test_timing_quantization_round_trip(self):
         values = torch.tensor([-0.5, -0.26, 0.0, 0.24, 0.5])
         indices = timing_value_to_index(values, n_timing_bins=5)

@@ -20,6 +20,18 @@ import argparse
 
 import moduleconf
 
+
+def seed_everything(seed, worker_id=0):
+    """Seed one training process deterministically from a declared run seed."""
+    process_seed = int(seed) + int(worker_id)
+    random.seed(process_seed)
+    np.random.seed(process_seed)
+    torch.manual_seed(process_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(process_seed)
+    return process_seed
+
+
 def train(workerId, nWorker, filename, runSeed, args):
     if args.pretrainedCheckpoint is not None:
         if os.path.exists(filename):
@@ -41,12 +53,10 @@ def train(workerId, nWorker, filename, runSeed, args):
         dist.init_process_group('nccl', rank=workerId, world_size=nWorker)
 
     device = torch.device("cuda:"+str(workerId%torch.cuda.device_count()) if torch.cuda.is_available() else "cpu")
-    torch.cuda.set_device(device)
-    random.seed(workerId+int(time.time()))
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+    processSeed = seed_everything(runSeed, workerId)
     # torch.autograd.set_detect_anomaly(True)
-    np.random.seed(workerId + int(time.time()))
-    torch.manual_seed(workerId+int(time.time()))
-    torch.cuda.manual_seed(workerId+ int(time.time()))
 
     if args.allow_tf32:
         torch.backends.cuda.matmul.allow_tf32 = True 
@@ -61,6 +71,7 @@ def train(workerId, nWorker, filename, runSeed, args):
 
 
     if workerId == 0:
+        print("Run seed: {} (worker seed: {})".format(runSeed, processSeed))
         # if the saved file does not exist
         if not os.path.exists(filename):
             print("initializing the model...")
@@ -441,6 +452,9 @@ if __name__ == '__main__':
     parser.add_argument('--max_lr', default = 2e-4, type=float)
     parser.add_argument('--weight_decay', default = 1e-4, type=float)
     parser.add_argument('--nIter', default= 180000,type = int)
+    parser.add_argument(
+            '--seed', required=True, type=int,
+            help="declared run seed used for model, data-order, and worker RNGs")
     parser.add_argument('--modelConf', required=True, help = "the path to the model conf file")
     parser.add_argument(
             '--pretrainedCheckpoint',
@@ -467,7 +481,7 @@ if __name__ == '__main__':
                     "Pretrained initialization requires a new training "
                     f"checkpoint path: {saved_filename}")
 
-    runSeed = int(time.time())
+    runSeed = args.seed
 
 
     if num_processes == 1:
