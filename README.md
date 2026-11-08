@@ -51,7 +51,7 @@ In V2, as demonstrated in the ISMIR 2024 paper, the changes from V1 are:
 2. The Score module is simplified with Scaled Inner Product Interval Scaling. The noise score is now zero tensor for compatibility with V1.
 3. Segmentwise processing now handles incomplete events with a longer duration 
 
-The structured-attribute extension uses 128 velocity classes and configurable sub-frame timing bins (`structuredTimingBins`, 21 by default). `structuredAttributeWeight` controls the contribution of these factors to interval scoring. Existing V2 checkpoints load with `strict=False`; the new head is initialized to an approximately neutral distribution and must be trained or fine-tuned before its attributes can guide interval selection.
+The structured-attribute extension uses 128 velocity classes and configurable sub-frame timing bins (`structuredTimingBins`, 21 by default). `structuredAttributeWeight` controls the contribution of these factors to interval scoring. `structuredOffsetScoreScale` (default `1.0`) scales only the offset-timing and offset-presence factors during transcription; it is an inference-time ablation and does not change the training objective. Existing V2 checkpoints load with `strict=False`; the new head is initialized to an approximately neutral distribution and must be trained or fine-tuned before its attributes can guide interval selection.
 
 ## Basic Usage
 

@@ -60,6 +60,7 @@ class ModelConfig:
         self.structuredAttributeHiddenSize = 256
         self.structuredTimingBins = 21
         self.structuredAttributeWeight = 1.0
+        self.structuredOffsetScoreScale = 1.0
 
         self.scoringExpansionFactor = 4
         self.useInnerProductScorer = True
@@ -184,10 +185,11 @@ class TransKun(torch.nn.Module):
                 "offsetPresence": offsetPresence,
                 }
 
-    def addStructuredAttributeScores(self, crf, attributeLogits):
+    def addStructuredAttributeScores(self, crf, attributeLogits, offsetScoreScale=1.0):
         """Marginalize attribute labels into each semi-CRF interval score."""
         return add_attribute_scores(
-                crf, attributeLogits, self.conf.structuredAttributeWeight)
+                crf, attributeLogits, self.conf.structuredAttributeWeight,
+                self.conf.structuredAttributeWeight * offsetScoreScale)
 
     def timingValueToIndex(self, value):
         return timing_value_to_index(value, self.conf.structuredTimingBins)
@@ -207,7 +209,7 @@ class TransKun(torch.nn.Module):
                 self.conf.structuredTimingBins,
                 self.conf.structuredAttributeWeight)
 
-    def processFramesBatch(self, framesBatch):
+    def processFramesBatch(self, framesBatch, offsetScoreScale=1.0):
         
         nBatch = framesBatch.shape[0]
         # nChannel = framesBatch.shape[1]
@@ -280,7 +282,8 @@ class TransKun(torch.nn.Module):
 
         crf = CRF.NeuralSemiCRFInterval(S_batch, S_skip_batch)
         attributeLogits = self.predictStructuredAttributes(ctx)
-        crf = self.addStructuredAttributeScores(crf, attributeLogits)
+        crf = self.addStructuredAttributeScores(
+                crf, attributeLogits, offsetScoreScale)
 
 
         return crf, ctx, attributeLogits
@@ -544,7 +547,8 @@ class TransKun(torch.nn.Module):
     def transcribeFrames(self,framesBatch, forcedStartPos= None, velocityCriteron = "hamming", onsetBound = None, lastFrameIdx = None):
         device = framesBatch.device
         nBatch=  framesBatch.shape[0]
-        crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(framesBatch)
+        crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(
+                framesBatch, offsetScoreScale=self.conf.structuredOffsetScoreScale)
         nSymbols = len(self.targetMIDIPitch)
         nFrame = framesBatch.shape[-2]
 
@@ -879,5 +883,3 @@ if __name__ == "__main__":
             logp = model.log_prob(audioSlices, notesBatch)
 
             logp.sum().backward()
-
-

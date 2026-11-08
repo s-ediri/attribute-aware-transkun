@@ -36,6 +36,25 @@ class StructuredAttributeTest(unittest.TestCase):
         joint = add_attribute_scores(crf, attributes, weight=1.0)
         self.assertEqual(joint.decode(), [[(0, 1)]])
 
+    def test_offset_score_scale_changes_only_interval_end_evidence(self):
+        crf = CRF.NeuralSemiCRFInterval(
+            torch.zeros(3, 3, 1), torch.zeros(2, 1))
+        attributes = _attribute_logits(3)
+        baseline = add_attribute_scores(crf, attributes, weight=1.0)
+        scaled = add_attribute_scores(
+            crf, attributes, weight=1.0, offset_weight=1.5)
+        default = add_attribute_scores(
+            crf, attributes, weight=1.0, offset_weight=1.0)
+
+        torch.testing.assert_close(default.score, baseline.score)
+        expected_end_delta = 0.5 * (
+            torch.logsumexp(attributes["offsetTiming"], dim=-1)
+            + torch.logsumexp(attributes["offsetPresence"], dim=-1)
+        ).permute(2, 0, 1).flatten(1, 2)
+        torch.testing.assert_close(
+            scaled.score - baseline.score,
+            expected_end_delta.unsqueeze(1).expand_as(scaled.score))
+
     def test_joint_label_score_backpropagates_to_all_attributes(self):
         attributes = _attribute_logits(3)
         intervals = [[[(0, 2)]]]

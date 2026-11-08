@@ -3,7 +3,9 @@ import torch
 from . import CRF
 
 
-def add_attribute_scores(crf, attribute_logits, weight):
+def add_attribute_scores(crf, attribute_logits, weight, offset_weight=None):
+    if offset_weight is None:
+        offset_weight = weight
     begin_score = (
         torch.logsumexp(attribute_logits["velocity"], dim=-1)
         + torch.logsumexp(attribute_logits["onsetTiming"], dim=-1)
@@ -12,7 +14,7 @@ def add_attribute_scores(crf, attribute_logits, weight):
     end_score = (
         torch.logsumexp(attribute_logits["offsetTiming"], dim=-1)
         + torch.logsumexp(attribute_logits["offsetPresence"], dim=-1)
-    ) * weight
+    ) * offset_weight
 
     begin_score = begin_score.permute(2, 0, 1).flatten(1, 2)
     end_score = end_score.permute(2, 0, 1).flatten(1, 2)
