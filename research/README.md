@@ -8,6 +8,8 @@
 - `../scripts/` contains reproducible evaluation drivers.
 - `../scripts/smoke_training_step.py` runs one forward/backward step without
   updating weights and should pass for B, C, and D before full training.
+- `../scripts/evaluate_reference_attributes.py` evaluates velocity, timing, and
+  boundary-presence heads on reference intervals, independently of detection.
 - `../checkpoint/` is intentionally local and ignored; it contains large model
   checkpoints, predictions, TensorBoard logs, and generated metric files.
 - `../datasets/` is intentionally local and ignored.

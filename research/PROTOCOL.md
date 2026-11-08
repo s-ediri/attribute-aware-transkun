@@ -81,6 +81,12 @@ statistical units.
 - Pitch: `<=48`, `49-72`, and `>=73`.
 - Pedal active/inactive, local polyphony, repeated same-pitch notes, and piece.
 
+Timing metrics are scored only for boundaries marked present. Duration strata
+require both onset and offset to be present so clipped window-boundary notes do
+not receive misleading duration labels. Legacy timing uses its native continuous
+Bernoulli density; structured timing uses categorical bins, so their NLL values
+are reported but not treated as numerically interchangeable.
+
 ## Decision rule for Phase 2
 
 Proceed to duration-aware offset modeling only if either:
@@ -108,5 +114,5 @@ hyperparameter or architecture sweep is outside the planned scope.
 1. Complete and validate the existing 137-piece full-recording robustness run.
 2. Run matched short smoke tests for B, C, and D using identical declared seeds.
 3. Verify checkpoint metadata and strict initialization before full runs.
-4. Add direct attribute accuracy and calibration evaluation.
+4. Validate direct reference-interval attribute and calibration evaluation.
 5. Freeze the final training/evaluation manifest before multi-seed runs.
