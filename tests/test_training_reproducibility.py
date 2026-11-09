@@ -4,10 +4,17 @@ import unittest
 import numpy as np
 import torch
 
-from transkun.train import seed_everything
+from transkun.train import effective_data_loader_workers, seed_everything
 
 
 class TrainingReproducibilityTest(unittest.TestCase):
+    def test_windows_uses_synchronous_data_loading(self):
+        self.assertEqual(effective_data_loader_workers(2, platform="win32"), 0)
+        self.assertEqual(effective_data_loader_workers(0, platform="win32"), 0)
+
+    def test_non_windows_preserves_requested_workers(self):
+        self.assertEqual(effective_data_loader_workers(2, platform="linux"), 2)
+
     def test_declared_seed_reproduces_python_numpy_and_torch_rngs(self):
         seed_everything(1234, worker_id=2)
         first = (

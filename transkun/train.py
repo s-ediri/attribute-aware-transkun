@@ -57,6 +57,14 @@ def current_git_revision():
         return {"commit": None, "dirty": None}
 
 
+def effective_data_loader_workers(requested, platform=None):
+    """Avoid duplicating the large MAESTRO annotation in Windows workers."""
+    platform = sys.platform if platform is None else platform
+    if platform == "win32" and requested > 0:
+        return 0
+    return requested
+
+
 def build_run_metadata(args, model_module, model_config, seed):
     """Build the immutable run description stored in every new checkpoint."""
     paths = {
@@ -95,6 +103,11 @@ def build_run_metadata(args, model_module, model_config, seed):
         "dataset_root": str(pathlib.Path(args.datasetPath).resolve()),
         "files": files,
         "git": current_git_revision(),
+        "runtime": {
+            "platform": sys.platform,
+            "effective_data_loader_workers": effective_data_loader_workers(
+                    args.dataLoaderWorkers),
+        },
     }
 
 
@@ -144,6 +157,8 @@ def resolve_run_metadata(filename, proposed):
                 + ", ".join(mismatches))
 
     resolved = copy.deepcopy(saved)
+    if proposed.get("runtime"):
+        resolved["runtime"] = copy.deepcopy(proposed["runtime"])
     resume_git = proposed.get("git")
     if resume_git and resume_git != saved.get("git"):
         history = resolved.setdefault("resume_git_history", [])
@@ -270,9 +285,15 @@ def train(workerId, nWorker, filename, runSeed, args):
     if args.augment:
         augmentator = Data.AugmentatorAudiomentations(sampleRate=44100, noiseFolder = args.noiseFolder, convIRFolder = args.irFolder)
 
-    dataLoaderOptions = {"num_workers": args.dataLoaderWorkers}
-    if args.dataLoaderWorkers > 0:
-        dataLoaderOptions["prefetch_factor"] = max(4, args.dataLoaderWorkers)
+    dataLoaderWorkers = effective_data_loader_workers(args.dataLoaderWorkers)
+    if workerId == 0 and dataLoaderWorkers != args.dataLoaderWorkers:
+        print(
+                "Windows memory safeguard: using synchronous data loading "
+                "(requested workers={}, effective workers={}).".format(
+                        args.dataLoaderWorkers, dataLoaderWorkers))
+    dataLoaderOptions = {"num_workers": dataLoaderWorkers}
+    if dataLoaderWorkers > 0:
+        dataLoaderOptions["prefetch_factor"] = max(4, dataLoaderWorkers)
 
     trainingComplete = False
     for epoc in range(startEpoch, 1000000):
@@ -511,9 +532,9 @@ def train(workerId, nWorker, filename, runSeed, args):
         dataIterVal = Data.DatasetMaestroIterator(datasetVal, hopSizeInSecond = conf.segmentHopSizeInSecond, chunkSizeInSecond = chunkSize, notesStrictlyContained=False, seed = runSeed+epoc*100) 
         if parallel:
             samplerVal = torch.utils.data.distributed.DistributedSampler(dataIterVal)
-            dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=args.dataLoaderWorkers, sampler = samplerVal)
+            dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=dataLoaderWorkers, sampler = samplerVal)
         else:
-            dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=args.dataLoaderWorkers, shuffle=True)
+            dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=dataLoaderWorkers, shuffle=True)
 
         model.eval()
         valResult = doValidation(model, dataloaderVal, parallel = parallel, device = device)
