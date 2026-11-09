@@ -4,7 +4,11 @@ import unittest
 import numpy as np
 import torch
 
-from transkun.train import effective_data_loader_workers, seed_everything
+from transkun.train import (
+    effective_data_loader_workers,
+    scheduler_warmup_complete,
+    seed_everything,
+)
 
 
 class TrainingReproducibilityTest(unittest.TestCase):
@@ -14,6 +18,11 @@ class TrainingReproducibilityTest(unittest.TestCase):
 
     def test_non_windows_preserves_requested_workers(self):
         self.assertEqual(effective_data_loader_workers(2, platform="linux"), 2)
+
+    def test_scheduler_warmup_is_absolute_across_resumes(self):
+        self.assertFalse(scheduler_warmup_complete(500))
+        self.assertTrue(scheduler_warmup_complete(501))
+        self.assertTrue(scheduler_warmup_complete(6000))
 
     def test_declared_seed_reproduces_python_numpy_and_torch_rngs(self):
         seed_everything(1234, worker_id=2)

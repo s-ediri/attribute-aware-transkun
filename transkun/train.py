@@ -65,6 +65,11 @@ def effective_data_loader_workers(requested, platform=None):
     return requested
 
 
+def scheduler_warmup_complete(global_step, warmup_steps=500):
+    """Return whether the run-level scheduler warmup has completed."""
+    return global_step > warmup_steps
+
+
 def build_run_metadata(args, model_module, model_config, seed):
     """Build the immutable run description stored in every new checkpoint."""
     paths = {
@@ -312,8 +317,6 @@ def train(workerId, nWorker, filename, runSeed, args):
         lossAll = []
 
         # curLRScheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = 5e-5, max_lr = 1e-4, step_size_up = len(dataloader)//10*5, step_size_down = len(dataloader)//10*5, cycle_momentum=False)
-        globalStepWarmupCutoff = globalStep+500
-
         for idx, batch in enumerate(dataloader):
             if workerId ==0:
                 currentLR = [p["lr"] for p in optimizer.param_groups][0]
@@ -430,7 +433,7 @@ def train(workerId, nWorker, filename, runSeed, args):
             # curLRScheduler.step()
             
             try:
-                if globalStep> globalStepWarmupCutoff:
+                if scheduler_warmup_complete(globalStep):
                     lrScheduler.step()
             except:
                 # continue after the final iteration
