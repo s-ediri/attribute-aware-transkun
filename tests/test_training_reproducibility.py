@@ -5,6 +5,7 @@ import numpy as np
 import torch
 
 from transkun.train import (
+    checkpoint_resume_epoch,
     effective_data_loader_workers,
     scheduler_warmup_complete,
     seed_everything,
@@ -23,6 +24,18 @@ class TrainingReproducibilityTest(unittest.TestCase):
         self.assertFalse(scheduler_warmup_complete(500))
         self.assertTrue(scheduler_warmup_complete(501))
         self.assertTrue(scheduler_warmup_complete(6000))
+
+    def test_periodic_checkpoint_resumes_in_the_current_epoch(self):
+        self.assertEqual(
+            checkpoint_resume_epoch(current_epoch=0, epoch_complete=False), 0)
+        self.assertEqual(
+            checkpoint_resume_epoch(current_epoch=4, epoch_complete=False), 4)
+
+    def test_completed_epoch_checkpoint_advances_to_the_next_epoch(self):
+        self.assertEqual(
+            checkpoint_resume_epoch(current_epoch=0, epoch_complete=True), 1)
+        self.assertEqual(
+            checkpoint_resume_epoch(current_epoch=4, epoch_complete=True), 5)
 
     def test_declared_seed_reproduces_python_numpy_and_torch_rngs(self):
         seed_everything(1234, worker_id=2)

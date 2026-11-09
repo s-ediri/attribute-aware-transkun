@@ -70,6 +70,16 @@ def scheduler_warmup_complete(global_step, warmup_steps=500):
     return global_step > warmup_steps
 
 
+def checkpoint_resume_epoch(current_epoch, epoch_complete):
+    """Return the zero-based epoch where training should resume.
+
+    Periodic checkpoints are written from inside an epoch, so they must retain
+    that epoch's data seed. Checkpoints written after validation may advance to
+    the next epoch because the current data iterator has been exhausted.
+    """
+    return current_epoch + 1 if epoch_complete else current_epoch
+
+
 def build_run_metadata(args, model_module, model_config, seed):
     """Build the immutable run description stored in every new checkpoint."""
     paths = {
@@ -509,7 +519,9 @@ def train(workerId, nWorker, filename, runSeed, args):
 
                 if idx%2000 ==1999:
                     save_checkpoint(
-                            filename, epoc+1, globalStep+1, model, lossTracker,
+                            filename,
+                            checkpoint_resume_epoch(epoc, epoch_complete=False),
+                            globalStep+1, model, lossTracker,
                             best_state_dict, optimizer, lrScheduler,
                             metadata=runMetadata)
                     print(
@@ -570,7 +582,9 @@ def train(workerId, nWorker, filename, runSeed, args):
                         "(validation F1={:.4f}).".format(globalStep, f1))
 
             save_checkpoint(
-                    filename, epoc+1, globalStep, model, lossTracker,
+                    filename,
+                    checkpoint_resume_epoch(epoc, epoch_complete=True),
+                    globalStep, model, lossTracker,
                     best_state_dict, optimizer, lrScheduler,
                     metadata=runMetadata)
 
