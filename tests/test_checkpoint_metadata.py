@@ -73,6 +73,33 @@ class CheckpointMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "seed"):
                 resolve_run_metadata(path, proposed)
 
+    def test_resume_records_a_changed_git_revision(self):
+        metadata = {
+            "system_id": "D", "seed": 123, "model_module": "module",
+            "model_config": {}, "training": {}, "dataset_root": "dataset",
+            "files": {
+                "model_config": {}, "train_metadata": {},
+                "validation_metadata": {},
+            },
+            "git": {"commit": "initial", "dirty": False},
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "checkpoint.pt"
+            self.create_checkpoint(path, metadata)
+            checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+            checkpoint["nIter"] = 6000
+            torch.save(checkpoint, path)
+            proposed = dict(metadata)
+            proposed["git"] = {"commit": "resume", "dirty": False}
+
+            resumed = resolve_run_metadata(path, proposed)
+
+        self.assertEqual(resumed["git"], metadata["git"])
+        self.assertEqual(resumed["resume_git_history"], [{
+            "start_step": 6000,
+            "git": {"commit": "resume", "dirty": False},
+        }])
+
 
 if __name__ == "__main__":
     unittest.main()

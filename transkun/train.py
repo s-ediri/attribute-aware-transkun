@@ -142,7 +142,18 @@ def resolve_run_metadata(filename, proposed):
         raise ValueError(
                 "Resume arguments do not match checkpoint metadata for: "
                 + ", ".join(mismatches))
-    return saved
+
+    resolved = copy.deepcopy(saved)
+    resume_git = proposed.get("git")
+    if resume_git and resume_git != saved.get("git"):
+        history = resolved.setdefault("resume_git_history", [])
+        entry = {
+            "start_step": checkpoint.get("nIter"),
+            "git": copy.deepcopy(resume_git),
+        }
+        if not history or history[-1] != entry:
+            history.append(entry)
+    return resolved
 
 
 def train(workerId, nWorker, filename, runSeed, args):

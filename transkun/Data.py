@@ -377,25 +377,48 @@ def createDatasetMaestroCSV(datasetPath, datasetMetaCSVPath, extendSustainPedal=
 
 
 def readAudioSlice(audioPath, begin, end, normalize=True):
-    from scipy.io import wavfile
-    import scipy.io
-    fs, data = wavfile.read(audioPath, mmap = True)
-        
-    b = math.floor((begin)*fs)
-    e = math.floor(end*fs)
-    dur = e - b 
+    """Read only the requested PCM frames instead of mapping the whole WAV."""
+    with wave.open(audioPath, "rb") as audio:
+        if audio.getcomptype() != "NONE":
+            raise ValueError(
+                    "Only uncompressed PCM WAV files are supported: "
+                    f"{audioPath}")
+        fs = audio.getframerate()
+        nChannels = audio.getnchannels()
+        sampleWidth = audio.getsampwidth()
+        nFrames = audio.getnframes()
+
+        dtypeBySampleWidth = {
+            1: np.dtype("uint8"),
+            2: np.dtype("<i2"),
+            4: np.dtype("<i4"),
+        }
+        if sampleWidth not in dtypeBySampleWidth:
+            raise ValueError(
+                    f"Unsupported {sampleWidth * 8}-bit PCM WAV: {audioPath}")
+
+        b = math.floor(begin * fs)
+        e = math.floor(end * fs)
+        dur = e - b
+        readBegin = max(b, 0)
+        readEnd = min(e, nFrames)
+        nRead = max(readEnd - readBegin, 0)
+        audio.setpos(min(readBegin, nFrames))
+        raw = audio.readframes(nRead)
+
+    dtype = dtypeBySampleWidth[sampleWidth]
+    data = np.frombuffer(raw, dtype=dtype)
+    data = data.reshape((-1, nChannels))
+
     # dur = math.ceil((end-begin)*fs)
     e = b+ dur
     # print(dur)
 
     # handle the case where b is negative
     
-    l = data.shape[0]
+    l = nFrames
 
-    if len(data.shape) == 1:
-        data = data[:, np.newaxis]
-
-    result = (data[max(b,0): min(e,l), :])
+    result = data
 
     # print("-----------")
     # print(dur, l, b, e)
