@@ -9,10 +9,14 @@ import time
 import types
 from pathlib import Path
 
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
+
 import numpy as np
 import torch
 
-from transkun import Data, Evaluation, ModelTransformer
+from transkun import Data, Evaluation, ModelTransformer, ModelTransformerLegacy
 
 
 BASELINE_SOURCE_COMMIT = "03b23776bae3c8b3046dcbe1f2b17bea64c5b25f"
@@ -27,6 +31,22 @@ def sha256_file(path):
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def git_provenance(repository_root=REPOSITORY_ROOT):
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repository_root,
+        check=True, capture_output=True, text=True).stdout.strip()
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=repository_root, check=True, capture_output=True,
+        text=True).stdout.splitlines()
+    return {
+        "repository_root": str(repository_root.resolve()),
+        "commit": commit,
+        "dirty": bool(status),
+        "status": status,
+    }
 
 
 def load_baseline_module():
@@ -53,6 +73,16 @@ def load_baseline_module():
         module.__dict__,
     )
     return module
+
+
+def model_module(model_kind):
+    if model_kind == "historical":
+        return load_baseline_module()
+    if model_kind == "legacy":
+        return ModelTransformerLegacy
+    if model_kind == "structured":
+        return ModelTransformer
+    raise ValueError(f"Unsupported model kind: {model_kind}")
 
 
 def config_from_json(config_path, model_class):
@@ -108,19 +138,21 @@ def transcribe(model, audio, sample_rate, device):
         return model.transcribe(audio_tensor)
 
 
-def score_pair(baseline, candidate, references, audio, sample_rate, device):
-    baseline_notes = transcribe(baseline, audio, sample_rate, device)
-    candidate_notes = transcribe(candidate, audio, sample_rate, device)
+def score_pair(
+        left, right, references, audio, sample_rate, device,
+        left_label="left", right_label="right"):
+    left_notes = transcribe(left, audio, sample_rate, device)
+    right_notes = transcribe(right, audio, sample_rate, device)
 
-    baseline_metrics = Evaluation.compareTranscription(
-        baseline_notes,
+    left_metrics = Evaluation.compareTranscription(
+        left_notes,
         references,
         splitPedal=True,
         computeDeviations=False,
         onset_tolerance=0.05,
     )
-    candidate_metrics = Evaluation.compareTranscription(
-        candidate_notes,
+    right_metrics = Evaluation.compareTranscription(
+        right_notes,
         references,
         splitPedal=True,
         computeDeviations=False,
@@ -129,58 +161,62 @@ def score_pair(baseline, candidate, references, audio, sample_rate, device):
 
     result = {}
     for metric in METRICS:
-        if metric not in baseline_metrics or metric not in candidate_metrics:
+        if metric not in left_metrics or metric not in right_metrics:
             raise KeyError(f"Expected metric {metric!r} was not produced")
         result[metric] = {
-            "baseline": [float(value) for value in baseline_metrics[metric]],
-            "fine_tuned_10000": [
-                float(value) for value in candidate_metrics[metric]
-            ],
+            left_label: [float(value) for value in left_metrics[metric]],
+            right_label: [float(value) for value in right_metrics[metric]],
         }
 
     return {
         "metrics": result,
-        "n_reference": int(baseline_metrics["nGT"]),
-        "n_estimated_baseline": int(baseline_metrics["nEst"]),
-        "n_estimated_fine_tuned_10000": int(candidate_metrics["nEst"]),
+        "n_reference": int(left_metrics["nGT"]),
+        "n_estimated": {
+            left_label: int(left_metrics["nEst"]),
+            right_label: int(right_metrics["nEst"]),
+        },
     }
 
 
-def summarize(records):
+def summarize(
+        records, left_label="left", right_label="right",
+        bootstrap_replicates=BOOTSTRAP_REPLICATES,
+        bootstrap_seed=BOOTSTRAP_SEED):
     if not records:
         return {}
 
     deltas = {
         metric: np.asarray(
             [
-                record["metrics"][metric]["fine_tuned_10000"][2]
-                - record["metrics"][metric]["baseline"][2]
+                record["metrics"][metric][right_label][2]
+                - record["metrics"][metric][left_label][2]
                 for record in records
             ],
             dtype=np.float64,
         )
         for metric in METRICS
     }
-    rng = np.random.default_rng(BOOTSTRAP_SEED)
-    indices = rng.integers(0, len(records), size=(BOOTSTRAP_REPLICATES, len(records)))
+    rng = np.random.default_rng(bootstrap_seed)
+    indices = rng.integers(
+        0, len(records), size=(bootstrap_replicates, len(records)))
 
     summary = {}
     for metric in METRICS:
-        baseline_f1 = np.asarray(
-            [record["metrics"][metric]["baseline"][2] for record in records],
+        left_f1 = np.asarray(
+            [record["metrics"][metric][left_label][2] for record in records],
             dtype=np.float64,
         )
-        candidate_f1 = np.asarray(
+        right_f1 = np.asarray(
             [
-                record["metrics"][metric]["fine_tuned_10000"][2]
+                record["metrics"][metric][right_label][2]
                 for record in records
             ],
             dtype=np.float64,
         )
         bootstrap_delta = deltas[metric][indices].mean(axis=1)
         summary[metric] = {
-            "baseline_macro_f1": float(baseline_f1.mean()),
-            "fine_tuned_10000_macro_f1": float(candidate_f1.mean()),
+            f"{left_label}_macro_f1": float(left_f1.mean()),
+            f"{right_label}_macro_f1": float(right_f1.mean()),
             "paired_delta_macro_f1": float(deltas[metric].mean()),
             "paired_piece_bootstrap_95_percentile_interval": [
                 float(value)
@@ -202,26 +238,141 @@ def write_result(path, result):
     os.replace(temporary_path, path)
 
 
+def resolve_sides(args):
+    compatibility_mode = any((
+        args.config is not None,
+        args.baseline_checkpoint is not None,
+        args.candidate_checkpoint is not None,
+    ))
+    explicit_mode = any((
+        args.left_config is not None,
+        args.left_checkpoint is not None,
+        args.right_config is not None,
+        args.right_checkpoint is not None,
+    ))
+    if compatibility_mode and explicit_mode:
+        raise ValueError(
+            "Do not combine legacy --config/--baseline-checkpoint/"
+            "--candidate-checkpoint flags with explicit left/right flags")
+
+    if compatibility_mode or not explicit_mode:
+        config = args.config or Path("transkun/pretrained/2.0.conf")
+        return {
+            "left": {
+                "label": "baseline",
+                "model_kind": "historical",
+                "config": config,
+                "checkpoint": args.baseline_checkpoint
+                or Path("transkun/pretrained/2.0.pt"),
+            },
+            "right": {
+                "label": "fine_tuned_10000",
+                "model_kind": "structured",
+                "config": config,
+                "checkpoint": args.candidate_checkpoint
+                or Path("checkpoint/structured-attributes-10000.pt"),
+            },
+        }
+
+    required = {
+        "left_config": args.left_config,
+        "left_checkpoint": args.left_checkpoint,
+        "right_config": args.right_config,
+        "right_checkpoint": args.right_checkpoint,
+    }
+    missing = [name for name, value in required.items() if value is None]
+    if missing:
+        raise ValueError(
+            "Explicit paired evaluation requires: " + ", ".join(missing))
+    if args.left_label == args.right_label:
+        raise ValueError("Left and right labels must be distinct")
+    return {
+        "left": {
+            "label": args.left_label,
+            "model_kind": args.left_model,
+            "config": args.left_config,
+            "checkpoint": args.left_checkpoint,
+        },
+        "right": {
+            "label": args.right_label,
+            "model_kind": args.right_model,
+            "config": args.right_config,
+            "checkpoint": args.right_checkpoint,
+        },
+    }
+
+
+def side_protocol(side):
+    result = {
+        "label": side["label"],
+        "model_kind": side["model_kind"],
+        "config": str(side["config"].resolve()),
+        "config_sha256": sha256_file(side["config"]),
+        "checkpoint": str(side["checkpoint"].resolve()),
+        "checkpoint_sha256": sha256_file(side["checkpoint"]),
+    }
+    if side["model_kind"] == "historical":
+        result["architecture_commit"] = BASELINE_SOURCE_COMMIT
+    return result
+
+
+def validate_saved_records(records, expected_names, left_label, right_label):
+    if not isinstance(records, list):
+        raise ValueError("Saved records must be a list")
+    names = []
+    for index, record in enumerate(records):
+        try:
+            name = record["audio_filename"]
+            metrics = record["metrics"]
+            estimated = record["n_estimated"]
+        except (KeyError, TypeError) as error:
+            raise ValueError(
+                f"Saved record {index} does not match the paired schema") from error
+        if set(metrics) != set(METRICS):
+            raise ValueError(f"Saved record {index} has an unexpected metric set")
+        for metric in METRICS:
+            if set(metrics[metric]) != {left_label, right_label}:
+                raise ValueError(
+                    f"Saved record {index} has unexpected labels for {metric}")
+        if set(estimated) != {left_label, right_label}:
+            raise ValueError(
+                f"Saved record {index} has unexpected estimated-note labels")
+        names.append(name)
+    if len(set(names)) != len(names):
+        raise ValueError("Saved partial results contain duplicate recordings")
+    if names != list(expected_names[:len(names)]):
+        raise ValueError(
+            "Saved partial results are not an exact prefix of the requested pieces")
+    return set(names)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Compare the original TransKun checkpoint and the 10k "
-            "structured-attribute checkpoint over complete MAESTRO "
+            "Compare two TransKun checkpoints over complete paired MAESTRO "
             "validation recordings."
         )
     )
     parser.add_argument("--dataset-path", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
-    parser.add_argument("--config", type=Path, default=Path("transkun/pretrained/2.0.conf"))
+    parser.add_argument("--left-model", choices=("historical", "legacy", "structured"), default="structured")
+    parser.add_argument("--left-config", type=Path)
+    parser.add_argument("--left-checkpoint", type=Path)
+    parser.add_argument("--left-label", default="left")
+    parser.add_argument("--right-model", choices=("historical", "legacy", "structured"), default="structured")
+    parser.add_argument("--right-config", type=Path)
+    parser.add_argument("--right-checkpoint", type=Path)
+    parser.add_argument("--right-label", default="right")
+    parser.add_argument("--config", type=Path, default=None)
     parser.add_argument(
         "--baseline-checkpoint",
         type=Path,
-        default=Path("transkun/pretrained/2.0.pt"),
+        default=None,
     )
     parser.add_argument(
         "--candidate-checkpoint",
         type=Path,
-        default=Path("checkpoint/structured-attributes-10000.pt"),
+        default=None,
     )
     parser.add_argument(
         "--output",
@@ -233,13 +384,12 @@ def main():
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
-    for input_path in (
-        args.dataset_path,
-        args.metadata,
-        args.config,
-        args.baseline_checkpoint,
-        args.candidate_checkpoint,
-    ):
+    sides = resolve_sides(args)
+
+    input_paths = [args.dataset_path, args.metadata]
+    for side in sides.values():
+        input_paths.extend((side["config"], side["checkpoint"]))
+    for input_path in input_paths:
         if not input_path.exists():
             raise FileNotFoundError(f"Required input does not exist: {input_path}")
     if args.limit is not None and args.limit < 1:
@@ -263,13 +413,13 @@ def main():
         "dataset_path": str(args.dataset_path.resolve()),
         "metadata_path": str(args.metadata.resolve()),
         "metadata_sha256": sha256_file(args.metadata),
-        "config_path": str(args.config.resolve()),
-        "config_sha256": sha256_file(args.config),
-        "baseline_architecture_commit": BASELINE_SOURCE_COMMIT,
-        "baseline_checkpoint": str(args.baseline_checkpoint.resolve()),
-        "baseline_checkpoint_sha256": sha256_file(args.baseline_checkpoint),
-        "candidate_checkpoint": str(args.candidate_checkpoint.resolve()),
-        "candidate_checkpoint_sha256": sha256_file(args.candidate_checkpoint),
+        "evaluator": {
+            "path": str(Path(__file__).resolve()),
+            "sha256": sha256_file(Path(__file__)),
+        },
+        "git": git_provenance(),
+        "left": side_protocol(sides["left"]),
+        "right": side_protocol(sides["right"]),
         "device": str(device),
         "piece_count": piece_count,
         "limit": args.limit,
@@ -293,6 +443,8 @@ def main():
             "interval": "percentile 95%",
         },
     }
+    expected_names = [
+        dataset.data[index]["audio_filename"] for index in range(piece_count)]
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
@@ -309,9 +461,11 @@ def main():
         if result.get("complete"):
             raise ValueError(f"Evaluation is already complete: {args.output}")
         records = result.get("records", [])
-        completed_names = {record["audio_filename"] for record in records}
-        if len(completed_names) != len(records):
-            raise ValueError("Saved partial results contain duplicate recordings")
+        if result.get("completed_pieces") != len(records):
+            raise ValueError("Saved completed_pieces does not match the record count")
+        completed_names = validate_saved_records(
+            records, expected_names,
+            sides["left"]["label"], sides["right"]["label"])
     else:
         if args.resume:
             raise FileNotFoundError(f"No partial result exists to resume: {args.output}")
@@ -326,21 +480,12 @@ def main():
         }
         write_result(args.output, result)
 
-    baseline_module = load_baseline_module()
-    baseline_config = config_from_json(args.config, baseline_module)
-    candidate_config = config_from_json(args.config, ModelTransformer)
-    baseline = load_model(
-        baseline_module,
-        baseline_config,
-        args.baseline_checkpoint,
-        device,
-    )
-    candidate = load_model(
-        ModelTransformer,
-        candidate_config,
-        args.candidate_checkpoint,
-        device,
-    )
+    loaded_models = {}
+    for name, side in sides.items():
+        module = model_module(side["model_kind"])
+        config = config_from_json(side["config"], module)
+        loaded_models[name] = load_model(
+            module, config, side["checkpoint"], device)
 
     start_time = time.time()
     for index in range(piece_count):
@@ -349,12 +494,14 @@ def main():
             continue
         _, references, audio, sample_rate = dataset.getSample(index)
         scored = score_pair(
-            baseline,
-            candidate,
+            loaded_models["left"],
+            loaded_models["right"],
             references,
             audio,
             sample_rate,
             device,
+            left_label=sides["left"]["label"],
+            right_label=sides["right"]["label"],
         )
         record = {"audio_filename": audio_filename, **scored}
         records.append(record)
@@ -370,7 +517,7 @@ def main():
         print(
             f"[{len(records)}/{piece_count}] {audio_filename}: "
             f"note+offset delta "
-            f"{record['metrics']['note+offset']['fine_tuned_10000'][2] - record['metrics']['note+offset']['baseline'][2]:+.6f}"
+            f"{record['metrics']['note+offset'][sides['right']['label']][2] - record['metrics']['note+offset'][sides['left']['label']][2]:+.6f}"
         )
 
     result.update(
@@ -378,7 +525,11 @@ def main():
             "complete": len(records) == piece_count,
             "completed_pieces": len(records),
             "records": records,
-            "summary": summarize(records),
+            "summary": summarize(
+                records,
+                left_label=sides["left"]["label"],
+                right_label=sides["right"]["label"],
+            ),
             "elapsed_seconds": time.time() - start_time,
         }
     )
