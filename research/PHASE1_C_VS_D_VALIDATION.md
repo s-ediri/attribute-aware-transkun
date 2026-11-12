@@ -80,17 +80,21 @@ transcription relative to the matched post-hoc control. The largest gains are
 on the two offset-aware outcomes, while note-only performance is preserved and
 slightly improved.
 
-However, `research/PROTOCOL.md` classifies MAESTRO validation as exploratory and
-states that the minimum worthwhile effect and note-only non-inferiority margin
-must be agreed with the supervisor before a result is classified as successful.
-Those thresholds are not recorded in the frozen protocol. Therefore:
+The practical-effect and safeguard thresholds were subsequently approved on
+November 12, 2026 and frozen in `research/PHASE1_TEST_ANALYSIS_PLAN.md`:
 
-1. this report does **not** formally classify Phase 1 as successful or failed;
-2. the observed effect sizes and uncertainty should be taken to the supervisor
-   to freeze the practical-effect and non-inferiority interpretation;
-3. checkpoint selection, metrics, strata, and the test-analysis plan must be
-   frozen before opening the MAESTRO test split;
-4. the MAESTRO test split remains untouched at this stage.
+- minimum worthwhile note+offset D-C: `+0.0020` macro F1;
+- note-only non-inferiority margin: `-0.0010` macro F1.
+
+Applying that rule to these validation results gives
+`progression_supported`: note+offset D-C is `+0.002465` with interval
+`[+0.001725, +0.003219]`, and the note-only lower bound is `+0.000334`, above
+the `-0.0010` safeguard margin.
+
+This is a retrospective classification of exploratory validation evidence,
+because the numerical thresholds were approved after validation was inspected.
+It supports proceeding to the one-time test analysis but is not independent
+confirmation. The MAESTRO test split remains untouched at this stage.
 
 ## Local result artifacts
 

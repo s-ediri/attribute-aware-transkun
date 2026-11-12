@@ -1,15 +1,15 @@
-# Proposed Phase 1 decision thresholds and MAESTRO test analysis
+# Approved Phase 1 decision thresholds and MAESTRO test analysis
 
 ## Status
 
-**Draft for supervisor approval. Do not access the MAESTRO test split until this
-document is approved, dated, and committed.**
+**Approved and frozen on November 12, 2026.**
 
-This proposal was written after inspecting MAESTRO validation results. It is
+This plan originated as a proposal written after inspecting MAESTRO validation
+results. It is
 therefore a prospective freeze for the one-time test analysis, not a claim that
 the numerical thresholds below were preregistered before validation.
 
-## Recommended thresholds
+## Approved thresholds
 
 Use absolute macro-F1 differences, reported as **D minus C**.
 
@@ -103,7 +103,7 @@ Use a paired recording-level percentile bootstrap:
 Do not bootstrap individual notes. Do not pool the three seed-by-recording rows
 as independent observations.
 
-## Proposed decision rule
+## Approved decision rule
 
 Classify Phase 1 as supporting progression only if **both** conditions hold on
 the one-time MAESTRO test analysis:
@@ -136,7 +136,7 @@ not sufficient.
 
 The progression decision is a gate requiring the primary note+offset criterion
 and note-only safeguard simultaneously. No additional multiplicity correction
-is proposed for that gate. Note+velocity+offset, note+velocity, per-seed results,
+is applied to that gate. Note+velocity+offset, note+velocity, per-seed results,
 and all strata are supportive or exploratory and must not override a failed
 primary gate.
 
@@ -175,9 +175,9 @@ restarting all affected runs under one corrected revision.
 
 ## Approval
 
-- Supervisor: **PENDING**
-- Decision: **PENDING**
-- Approval date: **PENDING**
-- Approved minimum worthwhile note+offset effect: **PENDING**
-- Approved note-only non-inferiority margin: **PENDING**
-- Notes: **PENDING**
+- Approver: **Project owner/user; personal name not supplied**
+- Decision: **Approved as recommended**
+- Approval date: **November 12, 2026**
+- Approved minimum worthwhile note+offset effect: **`+0.0020` macro F1**
+- Approved note-only non-inferiority margin: **`-0.0010` macro F1**
+- Notes: **Approval recorded before accessing MAESTRO test metrics.**
