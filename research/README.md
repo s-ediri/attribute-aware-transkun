@@ -5,6 +5,9 @@
 - `PHASE1_C_VS_D_VALIDATION.md` records the audited three-seed full-recording
   MAESTRO validation comparison and the frozen interpretation boundary before
   test-set analysis.
+- `PHASE1_TEST_ANALYSIS_PROPOSAL.md` proposes conservative practical-effect and
+  non-inferiority thresholds plus the one-time MAESTRO test analysis. It remains
+  a draft until supervisor approval is recorded.
 - `../experiments/configs/` contains tracked model configurations.
 - `../experiments/manifests/phase1.json` freezes the matched B/C/D training
   settings, seeds, dataset metadata hashes, and initialization checkpoint hash.
