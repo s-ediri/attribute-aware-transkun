@@ -1,0 +1,62 @@
+{
+  "status": "approved_and_frozen_before_test_metrics",
+  "approval_date": "2026-11-12",
+  "analysis_plan": "research/PHASE1_TEST_ANALYSIS_PLAN.md",
+  "dataset": {
+    "root": "datasets/maestro-v3.0.0-44100",
+    "metadata": "datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/test.pickle",
+    "metadata_sha256": "e6927e05821e7f6798c5f4b3d6a466088f1c1e910e98a70b130d0d7d60ce5c05",
+    "split": "test",
+    "pedal_extension": false
+  },
+  "evaluation": {
+    "driver": "scripts/evaluate_maestro_full_validation.py",
+    "driver_sha256": "0b699710f28f59826275919c4efcacebc4305d06eb37db379194b7e0788264f1",
+    "aggregator": "scripts/aggregate_phase1_c_vs_d.py",
+    "aggregator_sha256": "50da54e063f3cce6d8fdf2aa687d61fb95924e41cec82a8a02c0119f634fece8",
+    "launcher": "scripts/run_phase1_c_vs_d_test.ps1",
+    "launcher_sha256": "9ddfc41aa1c51d49210786dbefa75e1cc52ac4807abded2fefb6233515f29e49",
+    "device": "cuda",
+    "limit": null,
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 20261112
+  },
+  "decision": {
+    "minimum_worthwhile_note_offset_effect": 0.002,
+    "note_only_noninferiority_margin": -0.001
+  },
+  "configs": {
+    "C": {
+      "path": "experiments/configs/posthoc_attributes.conf",
+      "sha256": "a5a7d04ed249ba00348dc3b8bea7fd4c0cf78c3ac9749886fddb4fce1f7f448a"
+    },
+    "D": {
+      "path": "experiments/configs/joint_attributes.conf",
+      "sha256": "08a5952bc906738c3ca150c64b0778f4e8d7c46cd223f0ee63affcf49859daad"
+    }
+  },
+  "seeds": {
+    "20261108": {
+      "C_checkpoint": "checkpoint/phase1-C-seed-20261108.pt",
+      "C_checkpoint_sha256": "1a47a13fd5f91d043bc7b9b831b2f7b0b79172f825e990cba22e6ad17a9bcca0",
+      "D_checkpoint": "checkpoint/phase1-D-seed-20261108.pt",
+      "D_checkpoint_sha256": "8d0f4d50b095e92b68fc1cd1524b9fa78a5cae20e788114f03776326c552fa34",
+      "output": "checkpoint/phase1-C-vs-D-seed-20261108-full-test.json"
+    },
+    "20261109": {
+      "C_checkpoint": "checkpoint/phase1-C-seed-20261109.pt",
+      "C_checkpoint_sha256": "62f3359bef39e767bf5e0474eea6898a5c976aacc8f21ffc730ad6f66c108848",
+      "D_checkpoint": "checkpoint/phase1-D-seed-20261109.pt",
+      "D_checkpoint_sha256": "af43f72b920af1a026fc150a7806425241c76fbbbc41c2a18c8aab0873f18407",
+      "output": "checkpoint/phase1-C-vs-D-seed-20261109-full-test.json"
+    },
+    "20261110": {
+      "C_checkpoint": "checkpoint/phase1-C-seed-20261110.pt",
+      "C_checkpoint_sha256": "937046318dbce19257f1b2772de197a6328fb77fbba0d754cdc428f61a535e93",
+      "D_checkpoint": "checkpoint/phase1-D-seed-20261110.pt",
+      "D_checkpoint_sha256": "b4499b1b31623ec2b5141cd74de3986342ea77df88ac5aaf77b44e0971a101ce",
+      "output": "checkpoint/phase1-C-vs-D-seed-20261110-full-test.json"
+    }
+  },
+  "aggregate_output": "checkpoint/phase1-C-vs-D-full-test-aggregate.json"
+}

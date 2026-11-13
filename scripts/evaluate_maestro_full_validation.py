@@ -346,15 +346,23 @@ def validate_saved_records(records, expected_names, left_label, right_label):
     return set(names)
 
 
-def main():
+def evaluation_name(split):
+    if split not in ("validation", "test"):
+        raise ValueError(f"Unsupported evaluation split: {split}")
+    return f"full_piece_paired_{split}"
+
+
+def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Compare two TransKun checkpoints over complete paired MAESTRO "
-            "validation recordings."
+            "recordings."
         )
     )
     parser.add_argument("--dataset-path", type=Path, required=True)
     parser.add_argument("--metadata", type=Path, required=True)
+    parser.add_argument(
+        "--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--left-model", choices=("historical", "legacy", "structured"), default="structured")
     parser.add_argument("--left-config", type=Path)
     parser.add_argument("--left-checkpoint", type=Path)
@@ -382,7 +390,11 @@ def main():
     parser.add_argument("--device", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
-    args = parser.parse_args()
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     sides = resolve_sides(args)
 
@@ -409,7 +421,8 @@ def main():
         piece_count = min(piece_count, args.limit)
 
     protocol = {
-        "evaluation": "full_piece_paired_validation",
+        "evaluation": evaluation_name(args.split),
+        "split": args.split,
         "dataset_path": str(args.dataset_path.resolve()),
         "metadata_path": str(args.metadata.resolve()),
         "metadata_sha256": sha256_file(args.metadata),

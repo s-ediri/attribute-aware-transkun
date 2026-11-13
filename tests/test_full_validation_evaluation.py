@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 from scripts.evaluate_maestro_full_validation import (
     METRICS,
+    build_parser,
+    evaluation_name,
     resolve_sides,
     side_protocol,
     summarize,
@@ -37,6 +39,16 @@ class FullValidationEvaluationTest(unittest.TestCase):
         self.assertEqual(sides["left"]["label"], "baseline")
         self.assertEqual(sides["right"]["model_kind"], "structured")
         self.assertEqual(sides["right"]["label"], "fine_tuned_10000")
+
+    def test_split_defaults_to_validation_and_test_is_explicit(self):
+        parser = build_parser()
+        common = ["--dataset-path", "dataset", "--metadata", "metadata"]
+
+        self.assertEqual(parser.parse_args(common).split, "validation")
+        self.assertEqual(
+            parser.parse_args(common + ["--split", "test"]).split, "test")
+        self.assertEqual(evaluation_name("validation"), "full_piece_paired_validation")
+        self.assertEqual(evaluation_name("test"), "full_piece_paired_test")
 
     def test_explicit_sides_support_c_versus_d(self):
         sides = resolve_sides(self.arguments(

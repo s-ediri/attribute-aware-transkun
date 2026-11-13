@@ -10,9 +10,13 @@
 - `../experiments/configs/` contains tracked model configurations.
 - `../experiments/manifests/phase1.json` freezes the matched B/C/D training
   settings, seeds, dataset metadata hashes, and initialization checkpoint hash.
+- `../experiments/manifests/phase1-test-analysis.json` freezes the approved
+  one-time MAESTRO test inputs, hashes, outputs, and decision settings.
 - `../scripts/` contains reproducible evaluation drivers.
 - `../scripts/aggregate_phase1_c_vs_d.py` enforces the approved three-seed
   aggregation, bootstrap, and progression decision rule.
+- `../scripts/run_phase1_c_vs_d_test.ps1` performs a fail-closed hash/Git
+  preflight and launches the three frozen test runs plus aggregation.
 - `../scripts/smoke_training_step.py` runs one forward/backward step without
   updating weights and should pass for B, C, and D before full training.
 - `../scripts/optimizer_pilot.py` runs bounded real optimizer updates, saves a

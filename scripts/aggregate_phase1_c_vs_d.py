@@ -74,6 +74,20 @@ def seed_for_result(result):
     return matches[0]
 
 
+def source_split(protocol):
+    split = protocol.get("split")
+    if split is not None:
+        if protocol.get("evaluation") != f"full_piece_paired_{split}":
+            raise ValueError("Source split and evaluation name disagree")
+        return split
+    evaluation = protocol.get("evaluation")
+    if evaluation == "full_piece_paired_validation":
+        return "validation"
+    if evaluation == "full_piece_paired_test":
+        return "test"
+    raise ValueError("Source protocol has no recognized split identity")
+
+
 def validate_sources(results):
     if len(results) != len(SEEDS):
         raise ValueError(f"Expected exactly {len(SEEDS)} source results")
@@ -84,6 +98,7 @@ def validate_sources(results):
     evaluator_hash = None
     matching_protocol = None
     transcription_protocol = None
+    split = None
     for result in results:
         protocol = result.get("protocol", {})
         if not result.get("complete"):
@@ -109,6 +124,12 @@ def validate_sources(results):
             raise ValueError("C config hash does not match the frozen protocol")
         if protocol["right"].get("config_sha256") != CONFIG_HASHES["D"]:
             raise ValueError("D config hash does not match the frozen protocol")
+
+        current_split = source_split(protocol)
+        if split is None:
+            split = current_split
+        elif current_split != split:
+            raise ValueError("Source evaluation splits differ across seeds")
 
         seed = seed_for_result(result)
         if seed in by_seed:
@@ -168,6 +189,7 @@ def validate_sources(results):
         "evaluator_hash": evaluator_hash,
         "matching": matching_protocol,
         "transcription": transcription_protocol,
+        "split": split,
     }
 
 
@@ -261,6 +283,7 @@ def aggregate(results, bootstrap_replicates=BOOTSTRAP_REPLICATES,
     return {
         "protocol": {
             "comparison": "Phase 1 D minus C",
+            "split": validated["split"],
             "seeds": list(SEEDS),
             "piece_count": len(names),
             "piece_order_sha256": hashlib.sha256(

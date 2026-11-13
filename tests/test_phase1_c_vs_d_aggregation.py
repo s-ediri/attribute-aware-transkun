@@ -8,6 +8,7 @@ from scripts.aggregate_phase1_c_vs_d import (
     SEEDS,
     aggregate,
     classify,
+    source_split,
 )
 
 
@@ -44,6 +45,7 @@ def source(seed, deltas):
     return {
         "protocol": {
             "evaluation": "full_piece_paired_validation",
+            "split": "validation",
             "piece_count": len(records),
             "limit": None,
             "metadata_sha256": "metadata",
@@ -118,6 +120,25 @@ class PhaseOneAggregationTest(unittest.TestCase):
         base["note+offset"]["paired_delta_macro_f1"] = 0.0019
         self.assertEqual(
             classify(base), "offset_improvement_below_worthwhile_threshold")
+
+    def test_split_identity_is_required_and_consistent(self):
+        self.assertEqual(source_split({
+            "split": "test", "evaluation": "full_piece_paired_test"}), "test")
+        self.assertEqual(source_split({
+            "evaluation": "full_piece_paired_validation"}), "validation")
+        with self.assertRaisesRegex(ValueError, "disagree"):
+            source_split({
+                "split": "test",
+                "evaluation": "full_piece_paired_validation",
+            })
+
+        results = [source(seed, [0.002, 0.003]) for seed in SEEDS]
+        results[1]["protocol"].update({
+            "split": "test",
+            "evaluation": "full_piece_paired_test",
+        })
+        with self.assertRaisesRegex(ValueError, "splits differ"):
+            aggregate(results, bootstrap_replicates=10)
 
 
 if __name__ == "__main__":
