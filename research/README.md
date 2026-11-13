@@ -5,6 +5,8 @@
 - `PHASE1_C_VS_D_VALIDATION.md` records the audited three-seed full-recording
   MAESTRO validation comparison and the frozen interpretation boundary before
   test-set analysis.
+- `PHASE1_C_VS_D_TEST.md` records the audited one-time MAESTRO test result and
+  the final decision under the approved practical-effect gate.
 - `PHASE1_TEST_ANALYSIS_PLAN.md` freezes the approved practical-effect and
   non-inferiority thresholds plus the one-time MAESTRO test analysis.
 - `../experiments/configs/` contains tracked model configurations.
