@@ -375,9 +375,7 @@ class BasicBlock(nn.Module):
 
 
 
-"""
-What if we even simplify the scoring module?
-"""
+# Inner-product interval scorer used by the transformer model.
 class ScaledInnerProductIntervalScorer(nn.Module):
     def __init__(self, size, expansionFactor = 1, dropoutProb = 0.0, withScoreEps = False, lengthScaling="linear"):
         super().__init__()
@@ -496,7 +494,7 @@ class Backbone(nn.Module):
                     nn.GroupNorm(4, baseSize*4),
                     )
         else:
-            # this time the patch size is 8x 4
+            # Use an 8-by-4 time-frequency patch.
             self.downConv = nn.Sequential(
                     nn.ConstantPad2d( (2, 1, 4, 3), value = 0.0),
                     nn.Conv2d(baseSize, baseSize*2, 3, padding = 1, stride = (2,1)),
@@ -645,7 +643,7 @@ class Backbone(nn.Module):
         if not self.upsampleProjOnly:
             hTarget = self.upConv1d(hTarget)+ self.upConv1dSkip(hTarget)
         else:
-            # it seems that this linear projection is good enough
+            # Use the projection path without transposed-convolution upsampling.
             hTarget = self.upConv1dSkip(hTarget)
 
         hTarget = hTarget.unflatten(0, (x.shape[0], len(outputIndices)))
@@ -722,7 +720,7 @@ if __name__ == "__main__":
     # A2 = (-((x.unsqueeze(-2) @ x.unsqueeze(-3)))).exp()
 
 
-    # then we try to approximate multihead attention
+    # Approximate multi-head attention for the numerical check below.
     torch.manual_seed(42)
 
     k = torch.randn(1, 1, 100, 256)/4

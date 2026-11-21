@@ -38,7 +38,6 @@ def main():
     path = args.weight
     device = args.device
 
-    # TODO fix the conf
     confPath = args.conf
 
     confManager = moduleconf.parseFromFile(confPath)

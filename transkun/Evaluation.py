@@ -80,7 +80,7 @@ def midi_to_freq(midi):
     if midi>=0:
         freq = 2**((midi -69)/12)*440
     else:
-        # tricks for pedals
+        # Map pedal events to a separate frequency range.
         freq = 2**((-midi -69)/12)*440*100
     return freq
 def getSpan(eventList):
@@ -89,7 +89,7 @@ def getSpan(eventList):
 
 
 def computeFrameScore(estimated, gt, eventTypes):
-    # by default step is 0.01 to make it aligned with most papers
+    # A 10 ms frame step follows the convention used by most evaluations.
 
     # len(eventTypes)
 

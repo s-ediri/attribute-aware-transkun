@@ -488,7 +488,7 @@ class TransKun(torch.nn.Module):
         pVelocity = F.softmax(logitsVelocity, dim = -1)
 
         
-        #MSE
+        # Expected velocity under squared-error loss.
         w = torch.arange(128, device = device)
         velocity = (pVelocity*w).sum(-1)
 
@@ -629,16 +629,10 @@ class TransKun(torch.nn.Module):
             w = torch.arange(128, device = device)
             velocity = (pVelocity*w).sum(-1)
         elif velocityCriteron == "match":
-            #TODO: Minimal risk 
-            # predict velocity, readout by minimizing the risk
-            # 0.1 is usually the tolerance for the velocity, so....
-            
-            # It will never make so extreme predictions
-
-            # create the risk matrix
+            # Select the velocity with the highest expected tolerance accuracy.
             w = torch.arange(128, device = device)
 
-            # [Predicted, Actual]
+            # Rows are predictions and columns are target velocities.
 
             tolerance = 0.1* 128
             utility = ((w.unsqueeze(1)- w.unsqueeze(0)).abs()<tolerance).float()
@@ -649,11 +643,11 @@ class TransKun(torch.nn.Module):
 
 
         elif velocityCriteron == "hamming":
-            # return the mode
+            # Return the modal class.
             velocity = torch.argmax(pVelocity, dim = -1)
 
         elif velocityCriteron == "mae":
-            # then this time return the median
+            # Return the distribution median.
             pCum = pVelocity.cumsum(-1)
             tmp = (pCum-0.5)>0
             w2 = torch.arange(128, 0. ,-1, device = device)

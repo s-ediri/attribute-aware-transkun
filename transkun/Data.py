@@ -157,7 +157,6 @@ def extendPedal(note_events, pedal_events):
             idx += 1
             ex_note_events.append(note_event)
 
-        # print("haha")
         ex_note_events.sort(key = lambda x: (x.start, x.end,x.pitch))
 
         nOut = len(ex_note_events)

@@ -55,13 +55,12 @@ class ModelConfig:
         self.hiddenFactorAttn= 1
         self.hiddenFactor = 4
 
-        # Structured note attributes.  These boundary-local factors are cheap
-        # enough to score for every candidate interval in the semi-CRF.
+        # Boundary-local note attributes scored for each candidate interval.
         self.structuredAttributeHiddenSize = 256
         self.structuredTimingBins = 21
-        # Legacy joint weight retained for old configuration files. Explicit
-        # loss/score weights allow attributes to be trained without allowing
-        # them to influence semi-CRF interval selection.
+        # Retained for compatibility with earlier configuration files. Separate
+        # loss and score weights allow attribute training without changing the
+        # semi-CRF interval selection.
         self.structuredAttributeWeight = 1.0
         self.structuredAttributeLossWeight = None
         self.structuredAttributeScoreWeight = None
@@ -156,10 +155,10 @@ class TransKun(torch.nn.Module):
         return next(self.parameters()).device
 
     def resetStructuredAttributePredictor(self):
-        """Start new structured factors as normalized, nearly neutral tables.
+        """Initialise structured factors as approximately neutral tables.
 
-        This makes an old V2 checkpoint safe to fine-tune with the new model:
-        before learning, every attribute log-partition is approximately zero.
+        The initial log-partitions are close to zero, allowing a V2 checkpoint
+        to be fine-tuned without a large initial change to interval scores.
         """
         nTimingBins = self.conf.structuredTimingBins
         outputLayer = self.structuredAttributePredictor[-1]
@@ -173,11 +172,7 @@ class TransKun(torch.nn.Module):
                 
 
     def predictStructuredAttributes(self, ctx):
-        """Predict attributes at every pitch/time boundary.
-
-        The returned logits parameterize labels of an interval, rather than a
-        post-hoc regression performed only after interval decoding.
-        """
+        """Return attribute logits for every pitch and time boundary."""
         nTimingBins = self.conf.structuredTimingBins
         logits = self.structuredAttributePredictor(ctx)
         velocity, onsetTiming, offsetTiming, onsetPresence, offsetPresence = logits.split(
@@ -191,7 +186,7 @@ class TransKun(torch.nn.Module):
                 }
 
     def addStructuredAttributeScores(self, crf, attributeLogits, offsetScoreScale=1.0):
-        """Marginalize attribute labels into each semi-CRF interval score."""
+        """Marginalise attribute labels into the semi-CRF interval scores."""
         weight = self.conf.structuredAttributeScoreWeight
         if weight is None:
             weight = self.conf.structuredAttributeWeight
@@ -206,12 +201,12 @@ class TransKun(torch.nn.Module):
         return timing_index_to_value(index, self.conf.structuredTimingBins)
 
     def gatherStructuredAttributeLogits(self, attributeLogits, intervalsBatch):
-        """Gather begin/end attribute tables for a batch of interval paths."""
+        """Gather boundary attribute tables for a batch of interval paths."""
         return gather_attribute_logits(
                 attributeLogits, intervalsBatch, len(self.targetMIDIPitch))
 
     def structuredAttributeLogProb(self, gathered, velocity, timing, presence):
-        """Observed-label score minus the label log-partition per interval."""
+        """Calculate the observed-label score for each interval."""
         weight = self.conf.structuredAttributeLossWeight
         if weight is None:
             weight = self.conf.structuredAttributeWeight
@@ -226,7 +221,7 @@ class TransKun(torch.nn.Module):
         # nChannel = framesBatch.shape[1]
         # print(framesBatch.shape)
         
-        # gain normalization
+        # Per-example gain normalisation.
         # if self.training:
         framesBatchMean = torch.mean(framesBatch, dim = [1,2,3], keepdim=True)
         framesBatchStd = torch.std(framesBatch, dim = [1,2,3], keepdim=True)
@@ -237,22 +232,22 @@ class TransKun(torch.nn.Module):
 
         # print(featuresBatch.shape)
 
-        # now with shape [nBatch, nAudioChannel, nStep, NFreq, nChannel]
+        # Shape: [batch, audio channel, time, frequency, feature].
         nChannel = 1
 
 
         featuresBatch  = featuresBatch.view(nBatch*nChannel, *featuresBatch.shape[-3:])
-        # now with shape [nBatch* nAudioChannel, nStep, NFreq, nChannel]
+        # Merge the batch and audio-channel dimensions.
 
 
         ctx = self.backbone(featuresBatch, outputIndices = torch.tensor(self.targetMIDIPitch, device = featuresBatch.device))
 
-        # construct pairwise score matrix
+        # Construct the pairwise interval-score matrix.
 
         # S = torch.einsum("iptd, iptd->"
         # print(ctx.shape)
 
-        # obtain intervalic features
+        # Form candidate interval features.
         # print(ctx.shape)
 
         # # onset:
@@ -271,7 +266,7 @@ class TransKun(torch.nn.Module):
         if self.useInnerProductScorer:
             S_batch, S_skip_batch = self.scorer(ctx)
 
-            # now with shape [ nStep, nStep, nBatch, nSym ] 
+            # Shape: [start, end, batch, symbol].
 
 
 
@@ -283,7 +278,7 @@ class TransKun(torch.nn.Module):
 
 
 
-        # batch the CRF together 
+        # Flatten batch and symbol dimensions for the CRF.
         S_batch = S_batch.flatten(-2,-1)
         S_skip_batch= S_skip_batch.flatten(-2,-1)
 
@@ -303,7 +298,7 @@ class TransKun(torch.nn.Module):
     def log_prob(self, xBatch, notesBatch):
         nBatch = xBatch.shape[0]
         xBatch = xBatch.transpose(-1,-2)
-        # now with shape[nbatch, nAudioChannel, nSample]
+        # Shape: [batch, audio channel, sample].
 
         device = xBatch.device
 
@@ -315,7 +310,7 @@ class TransKun(torch.nn.Module):
         crfBatch, ctxBatch, attributeLogits = self.processFramesBatch(framesBatch)
 
 
-        # prepare groundtruth 
+        # Prepare reference intervals and attributes.
         intervalsBatch= []
         velocityBatch = []
         ofRefinedGTBatch = []
@@ -597,28 +592,22 @@ class TransKun(torch.nn.Module):
             return [[] for _ in range(nBatch)], [0 for _ in range(len(path))]
 
 
-        # then predict the attribute set
+        # Read out attributes for the decoded intervals.
 
         gathered, _ = self.gatherStructuredAttributeLogits(attributeLogits, intervalsBatch)
         logitsVelocity = gathered["velocity"]
         pVelocity = F.softmax(logitsVelocity, dim = -1)
 
         
-        #MSE
+        # Expected velocity under squared-error loss.
         if velocityCriteron == "mse":
             w = torch.arange(128, device = device)
             velocity = (pVelocity*w).sum(-1)
         elif velocityCriteron == "match":
-            #TODO: Minimal risk 
-            # predict velocity, readout by minimizing the risk
-            # 0.1 is usually the tolerance for the velocity, so....
-            
-            # It will never make so extreme predictions
-
-            # create the risk matrix
+            # Select the velocity with the highest expected tolerance accuracy.
             w = torch.arange(128, device = device)
 
-            # [Predicted, Actual]
+            # Rows are predictions and columns are target velocities.
 
             tolerance = 0.1* 128
             utility = ((w.unsqueeze(1)- w.unsqueeze(0)).abs()<tolerance).float()
@@ -629,11 +618,11 @@ class TransKun(torch.nn.Module):
 
 
         elif velocityCriteron == "hamming":
-            # return the mode
+            # Return the modal class.
             velocity = torch.argmax(pVelocity, dim = -1)
 
         elif velocityCriteron == "mae":
-            # then this time return the median
+            # Return the distribution median.
             pCum = pVelocity.cumsum(-1)
             tmp = (pCum-0.5)>0
             w2 = torch.arange(128, 0. ,-1, device = device)
