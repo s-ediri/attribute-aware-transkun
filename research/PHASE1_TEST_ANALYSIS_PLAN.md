@@ -1,13 +1,12 @@
-# Approved Phase 1 decision thresholds and MAESTRO test analysis
+# Phase 1 test analysis plan and decision thresholds
 
 ## Status
 
 **Approved and frozen on November 12, 2026.**
 
-This plan originated as a proposal written after inspecting MAESTRO validation
-results. It is
-therefore a prospective freeze for the one-time test analysis, not a claim that
-the numerical thresholds below were preregistered before validation.
+This plan was written after the MAESTRO validation results had been inspected.
+It fixed the procedure for the one-time test analysis, but the numerical
+thresholds were not preregistered before validation.
 
 ## Approved thresholds
 
@@ -16,23 +15,23 @@ Use absolute macro-F1 differences, reported as **D minus C**.
 1. **Minimum worthwhile note+offset improvement:** `+0.0020` F1.
 2. **Note-only non-inferiority margin:** `-0.0010` F1.
 
-In percentage-point language, these are a required `+0.20` point improvement
-for the primary offset-aware outcome and a maximum tolerated `0.10` point loss
-for the note-only safeguard.
+These values correspond to a required `+0.20` percentage-point improvement in
+the primary offset-aware result and a maximum tolerated `0.10` percentage-point
+loss in note-only F1.
 
 ### Rationale
 
-- The note+offset threshold requires more than a merely positive numerical
-  difference while remaining realistic for a tightly controlled comparison in
-  which C and D share architecture, training budget, data order, and attribute
+- The note+offset threshold requires more than a small positive numerical
+  difference, while remaining realistic for a controlled comparison in which C
+  and D share the architecture, training budget, data order, and attribute
   losses.
 - The note-only margin is deliberately narrower than the required offset-aware
   gain. It prevents a claimed offset benefit from being purchased with a
   similarly sized deterioration in basic note detection.
 - The values are simple absolute effect thresholds and do not depend on the
   number of notes or recordings in the test split.
-- These thresholds require supervisor approval because validation was already
-  observed. They must not be adjusted after any test result is inspected.
+- Supervisor approval was required because the validation results were already
+  known. The thresholds could not be changed after viewing any test result.
 
 ## Frozen systems and checkpoints
 
@@ -82,7 +81,7 @@ For each metric:
 5. Compute C and D macro precision, recall, and F1 by first taking the per-seed
    macro over recordings and then averaging those three seed macros.
 
-This treats the three seeds as repeated realizations of the fixed training
+This treats the three seeds as repeated realisations of
 procedure while retaining the recording as the independent evaluation unit. In
 addition to the aggregate result, report every seed separately as a sensitivity
 analysis.
@@ -103,7 +102,7 @@ Use a paired recording-level percentile bootstrap:
 Do not bootstrap individual notes. Do not pool the three seed-by-recording rows
 as independent observations.
 
-## Approved decision rule
+## Decision rule
 
 Classify Phase 1 as supporting progression only if **both** conditions hold on
 the one-time MAESTRO test analysis:
@@ -115,9 +114,8 @@ the one-time MAESTRO test analysis:
    - the lower bound of the paired 95% bootstrap interval for note-only D-C is
      greater than `-0.0010`.
 
-The effect threshold addresses practical importance; the interval condition
-addresses uncertainty. Passing only one of the two primary-benefit clauses is
-not sufficient.
+The effect threshold represents practical importance, while the interval
+condition represents uncertainty. Both primary-benefit requirements must pass.
 
 ### Outcome labels
 
@@ -134,11 +132,11 @@ not sufficient.
 
 ## Multiplicity and interpretation
 
-The progression decision is a gate requiring the primary note+offset criterion
-and note-only safeguard simultaneously. No additional multiplicity correction
-is applied to that gate. Note+velocity+offset, note+velocity, per-seed results,
-and all strata are supportive or exploratory and must not override a failed
-primary gate.
+Progression requires both the primary note+offset condition and the note-only
+safeguard. No additional multiplicity correction is applied to this joint rule.
+The note+velocity+offset result, note+velocity result, per-seed results, and
+stratified analyses are supportive or exploratory and cannot override a failed
+primary decision.
 
 ## Pre-specified strata
 

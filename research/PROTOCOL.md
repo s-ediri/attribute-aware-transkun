@@ -1,4 +1,4 @@
-# Attribute-Aware Structured Decoding Research Protocol
+# Research protocol: attribute-aware structured decoding
 
 ## Working title
 
@@ -7,11 +7,11 @@ Controlled Evaluation and Duration-Aware Offset Modeling**
 
 ## Scope
 
-This project tests whether note attributes should influence semi-CRF event
-selection, rather than only being read out after an interval has been decoded.
-The first phase isolates this effect from additional fine-tuning. The second
-phase may introduce a duration-aware offset factor only after the controlled
-comparison is complete.
+The project investigates whether note attributes should contribute directly to
+semi-CRF event selection instead of being predicted only after an interval has
+been decoded. Phase 1 isolates this effect from additional fine-tuning. A
+duration-aware offset factor may be considered in Phase 2, but only after the
+controlled comparison and the planned mechanism analysis have been completed.
 
 ## Primary research question
 
@@ -28,8 +28,8 @@ attributes without allowing them to affect interval selection?
 | C | Structured heads with loss weight 1 and score weight 0 | Trained-attribute/post-hoc control |
 | D | Structured heads with loss weight 1 and score weight 1 | Attribute-aware joint decoding |
 
-The key method contrast is **D minus C**. The contrast **B minus A** measures
-continued fine-tuning. System B uses the maintained historical architecture in
+The main comparison is **D minus C**. The **B minus A** comparison measures the
+effect of continued fine-tuning. System B uses the historical architecture in
 `transkun/ModelTransformerLegacy.py`, sourced from commit `03b23776`, and must
 strictly load the packaged checkpoint.
 
@@ -42,14 +42,15 @@ strictly load the packaged checkpoint.
 - Seeds: `20261108`, `20261109`, and `20261110` for final runs.
 - Data order, augmentation policy, batch size, learning-rate schedule, and
   checkpoint selection rule must match across B, C, and D.
-- Development runs must be labeled and must not be substituted for final seeds.
+- Development runs must be labelled and cannot replace the final-seed runs.
 
 ## Data-use rules
 
 - MAESTRO validation has already informed development and is used for model
   selection and exploratory analysis only.
-- SMD has already informed repeated comparisons and is an exploratory external
-  robustness set, not independent confirmation.
+- SMD has already been used for repeated comparisons. It is therefore treated
+  as an exploratory external dataset rather than an independent confirmation
+  set.
 - Freeze the method, checkpoint rule, metrics, and strata before evaluating the
   MAESTRO test split. Evaluate that split once for the final analysis.
 - Do not choose new weights or checkpoints from partial full-piece results.
@@ -60,9 +61,9 @@ strictly load the packaged checkpoint.
 2. Macro per-piece note-only F1 as a non-inferiority safeguard.
 3. Macro per-piece note+velocity+offset F1.
 
-Report precision and recall alongside every F1 result. Use paired piece-level
-differences and a piece-cluster bootstrap; individual notes are not independent
-statistical units.
+Precision and recall are reported with each F1 result. Uncertainty is estimated
+from paired recording-level differences using a recording bootstrap; individual
+notes are not treated as independent observations.
 
 ## Mechanism outcomes
 
@@ -71,8 +72,8 @@ statistical units.
 - Onset/offset timing: bin accuracy, adjacent-bin accuracy, signed error,
   absolute error, NLL, and calibration.
 - Boundary presence: precision, recall, F1, average precision, and calibration.
-- Relate factor confidence and correctness to interval additions, removals, and
-  boundary changes between systems C and D.
+- Compare factor confidence and correctness with interval additions, removals,
+  and boundary changes between systems C and D.
 
 ## Pre-specified strata
 
@@ -81,11 +82,12 @@ statistical units.
 - Pitch: `<=48`, `49-72`, and `>=73`.
 - Pedal active/inactive, local polyphony, repeated same-pitch notes, and piece.
 
-Timing metrics are scored only for boundaries marked present. Duration strata
-require both onset and offset to be present so clipped window-boundary notes do
-not receive misleading duration labels. Legacy timing uses its native continuous
-Bernoulli density; structured timing uses categorical bins, so their NLL values
-are reported but not treated as numerically interchangeable.
+Timing is scored only where the relevant boundary is present. Duration groups
+require both onset and offset to be present, which avoids assigning misleading
+durations to notes clipped by a window boundary. The legacy model uses a
+continuous Bernoulli timing distribution, whereas the structured model uses
+categorical bins. Their negative log-likelihood values are therefore reported
+separately and are not compared directly.
 
 ## Decision rule for Phase 2
 
@@ -96,9 +98,9 @@ Proceed to duration-aware offset modeling only if either:
 2. mechanism analysis identifies a stable duration-conditioned failure mode
    attributable to the boundary-local offset factor.
 
-The minimum worthwhile effect and non-inferiority margin must be agreed with
-the supervisor before final training. Until then, report effect sizes and
-uncertainty without classifying a result as successful.
+The minimum worthwhile effect and non-inferiority margin must be agreed with the
+supervisor before the final analysis. Until then, results should be described in
+terms of effect size and uncertainty rather than pass or fail.
 
 ## Phase 2 candidate
 
@@ -106,8 +108,8 @@ Replace or augment the boundary-local end score with a candidate-interval term:
 
 `S(i, j, p) = S_interval(i, j, p) + A_onset(i, p) + A_offset(j, p) + D(j-i, p)`
 
-Only one duration-aware formulation should be selected after Phase 1. A broad
-hyperparameter or architecture sweep is outside the planned scope.
+Only one duration-aware formulation may be selected after Phase 1. A broad
+hyperparameter or architecture search is outside the scope of the project.
 
 ## Immediate milestones
 

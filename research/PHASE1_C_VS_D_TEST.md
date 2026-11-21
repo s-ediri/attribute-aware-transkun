@@ -1,19 +1,19 @@
-# Phase 1 C versus D MAESTRO test result
+# Phase 1 test result: System C versus System D
 
 ## Status
 
 The one-time MAESTRO test analysis completed on November 13, 2026 under the
 approved and frozen plan in `research/PHASE1_TEST_ANALYSIS_PLAN.md`.
 
-The final decision is:
+The final decision label is:
 
 ```text
 offset_improvement_below_worthwhile_threshold
 ```
 
-System D produces a reproducible positive improvement over System C, but the
-primary note+offset effect does not reach the approved minimum worthwhile effect
-of `+0.0020` macro F1. The approved progression gate therefore does not pass.
+System D improved on System C consistently, but the primary note+offset effect
+did not reach the approved minimum worthwhile difference of `+0.0020` macro F1.
+The Phase 1 progression rule was therefore not met.
 
 ## Protocol audit
 
@@ -67,7 +67,7 @@ All four aggregate intervals are strictly above zero.
 The note+offset effect is positive in every seed, and every seed-specific paired
 interval excludes zero. Every seed's point estimate remains below `+0.0020`.
 
-## Approved decision gate
+## Decision rule
 
 | Criterion | Observed | Required | Result |
 |---|---:|---:|---|
@@ -75,20 +75,19 @@ interval excludes zero. Every seed's point estimate remains below `+0.0020`.
 | Note+offset interval lower bound | +0.001012 | greater than 0 | Pass |
 | Note-only interval lower bound | +0.000305 | greater than -0.0010 | Pass |
 
-The observed primary effect is approximately 71% of the approved minimum
-worthwhile effect. It is statistically supported and consistent across seeds,
-but it does not satisfy the practical-effect clause. The note-only safeguard
-passes comfortably and shows a small improvement rather than a trade-off.
+The observed primary effect is about 71% of the approved minimum worthwhile
+difference. The effect is consistent across seeds and its interval excludes
+zero, but it does not meet the practical-effect requirement. The note-only
+safeguard passes and shows a small improvement rather than a trade-off.
 
 ## Interpretation
 
-The test result supports the scientific claim that allowing trained velocity,
-timing, and boundary-presence attributes to influence semi-CRF decoding yields
-a small positive transcription improvement over using the same trained
-attributes only after interval selection.
+The test result indicates that allowing velocity, timing, and boundary-presence
+attributes to influence semi-CRF decoding gives a small improvement over using
+the same trained attributes only after interval selection.
 
-It does **not** support the stronger practical claim required by the approved
-Phase 1 progression rule. Therefore:
+It does **not** meet the stronger practical requirement in the approved Phase 1
+rule. Therefore:
 
 1. Phase 1 should be reported as a positive but sub-threshold result.
 2. Progression to duration-aware offset modeling is not supported by the primary
@@ -100,9 +99,10 @@ Phase 1 progression rule. Therefore:
 5. Any further mechanism or stratum analysis must remain explanatory and must
    not be used to relabel the confirmatory decision.
 
-The test effect is smaller than the exploratory validation estimate
-(`+0.001416` versus `+0.002465` for note+offset), illustrating why the untouched
-test split and the practical-effect threshold were necessary.
+The test effect was smaller than the exploratory validation estimate
+(`+0.001416` compared with `+0.002465` for note+offset). This difference supports
+the decision to keep the test split separate and to fix the practical threshold
+before test evaluation.
 
 ## Reproducibility
 
@@ -118,9 +118,9 @@ Artifact SHA-256:
 32eacfa5d58ddf57c25e85146767cc148a57d2a283e460fd9c46440e4ee80ed5
 ```
 
-An independent rerun of `scripts/aggregate_phase1_c_vs_d.py` produced an exactly
-equal JSON object for the protocol, per-seed results, aggregate summary,
-decision, source hashes, and analysis provenance.
+Rerunning `scripts/aggregate_phase1_c_vs_d.py` produced the same JSON content for
+the protocol, per-seed results, aggregate summary, decision, source hashes, and
+analysis provenance.
 
-The generated JSON artifacts remain local and ignored by Git. This tracked
-report records the compact final result needed for the thesis.
+The generated JSON files remain local and are ignored by Git. This report keeps
+the final result in a compact, tracked form for the thesis.

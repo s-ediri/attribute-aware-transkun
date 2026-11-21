@@ -1,11 +1,12 @@
-# Piano Transcription with Neural Semi-CRF
+# Piano transcription with a neural semi-CRF
 
 ## Thesis research extension
 
-This fork studies **attribute-aware structured decoding**: whether velocity,
-sub-frame timing, and boundary-presence evidence should participate in the
-semi-CRF decision about which note intervals exist. The controlled study and
-data-use rules are defined in [`research/PROTOCOL.md`](research/PROTOCOL.md).
+This repository extends TransKun to study **attribute-aware structured
+decoding**. The main question is whether velocity, sub-frame timing, and
+boundary-presence evidence should contribute to the semi-CRF decision about
+which note intervals are present. The experimental design and data-use rules
+are set out in [`research/PROTOCOL.md`](research/PROTOCOL.md).
 
 Tracked experiment configurations are under `experiments/configs/`. Large
 datasets, checkpoints, predictions, and generated metrics remain local and are
@@ -15,7 +16,8 @@ ignored by Git. The validated lightweight test command is:
 python -m unittest discover -s tests -v
 ```
 
-The first new control separates attribute supervision from structured decoding:
+The main Phase 1 control separates attribute supervision from structured
+decoding:
 
 - `joint_attributes.conf`: attribute loss weight `1`, decoding score weight `1`.
 - `posthoc_attributes.conf`: attribute loss weight `1`, decoding score weight `0`.
@@ -27,10 +29,11 @@ The matched Phase 1 settings and file hashes are frozen in
 system ID, seed, configuration, data/checkpoint hashes, training budget, and Git
 revision under its `metadata` field.
 
-All new training runs must pass an explicit `--seed`; the planned final seeds
-are listed in the research protocol.
+New training runs require an explicit `--seed`. The final seeds are listed in
+the research protocol.
 
-A no-update real-data smoke step can be run before training. For System B:
+A forward/backward smoke test can be run on real data before training. For
+System B:
 
 ```powershell
 python scripts/smoke_training_step.py `
@@ -44,37 +47,41 @@ python scripts/smoke_training_step.py `
 ```
 
 
-This repo contains code for following papers for transcribing expressive piano performance into MIDI.
+The original TransKun code accompanies the following papers on expressive piano
+transcription.
 
 > Yujia Yan and Zhiyao Duan, Scoring intervals using non-hierarchical transformer for automatic piano transcription, in Proc. International Society for Music Information Retrieval Conference (ISMIR), 2024, [Paper](https://arxiv.org/abs/2404.09466)
 
 > Yujia Yan, Frank Cwitkowitz, Zhiyao Duan, Skipping the Frame-Level: Event-Based Piano Transcription With Neural Semi-CRFs, Advances in Neural Information Processing Systems, 2021, 
 [OpenReview](https://openreview.net/forum?id=DGA8XbJ8FVd), [paper](https://openreview.net/pdf?id=DGA8XbJ8FVd), [appendix](https://openreview.net/attachment?id=DGA8XbJ8FVd&name=supplementary_material)
 
-## Demo Video:
+## Demo video
 [![Demo Video](https://img.youtube.com/vi/6P3kFHUBicw/0.jpg)](https://www.youtube.com/watch?v=6P3kFHUBicw)
 
 
-## pip installation
+## Installation from PyPI
 
 ```bash
 pip3 install transkun
 ```
 
-The pip package provides a quick command for transcribing piano performance audio into midi:
+The package provides a command for transcribing piano audio to MIDI:
 
 ```bash
 $ transkun input.mp3 output.mid
 ```
 
-with cuda:
+To use CUDA:
 
 ```bash
 $ transkun input.mp3 output.mid --device cuda
 ```
 
-**Note:** The code/pip package shipped checkpoint is trained **without pedal extension of notes**, and **with data augmentation**,which I believe is closer to a real performance. 
-Be cautious that the convention for the piano transcription task in previous works is extending all notes by sustain pedal durations. For more checkpoints, e.g, those reported in the paper, see [Model Cards](#model-cards)
+**Note:** The checkpoint distributed with the package was trained **without
+sustain-pedal extension** and **with data augmentation**. Some earlier piano
+transcription work extends note offsets by the sustain-pedal duration, so results
+using the two conventions are not directly equivalent. See [Model
+Cards](#model-cards) for the checkpoints reported in the papers.
 
 **Colab Notebook** [Colab](https://colab.research.google.com/drive/1XuFNdYbcHBy3OyGCmtt2UGa2-PXjkJeo?usp=sharing)
 
@@ -273,7 +280,7 @@ python3 -m transkun.train checkpoint/structured-attributes.pt \
 
 ### Comparing the output MIDI files and the groundtruth MIDI files
 
-We also provide an out-of-box tool for computing metrics directly from output midi files.
+The evaluation tool can compute metrics directly from output MIDI files.
 
 ```bash
 usage: computeMetrics.py [-h] [--outputJSON OUTPUTJSON] [--noPedalExtension] [--applyPedalExtensionOnEstimated] [--nProcess [NPROCESS]] [--alignOnset] [--dither DITHER]
@@ -307,11 +314,11 @@ options:
 
 ```
 
-Currently, we do not support evaluation of multitrack MIDIs.
+Multitrack MIDI evaluation is not currently supported.
 
-This command can also be used directly as the command line script 'transkunEval' if the pip package is installed.
+When the package is installed, the same command is available as `transkunEval`.
 
-### Ploting the empirical cumulative distribution function to visualize the onset/offset accuracy
+### Plotting onset and offset deviation distributions
 
 Use the following script to plot the ECDF curve for onset/offset deviations:
 
@@ -343,7 +350,7 @@ options:
 
 ### Citation
 
-If you find this repository helpful, please consider citing:
+If this repository is useful in your work, please cite the relevant paper:
 
 
 Bibtex:

@@ -1,17 +1,17 @@
-# Phase 1 C versus D full-recording validation
+# Phase 1 validation: System C versus System D
 
 ## Status
 
 Completed and audited on November 12, 2026.
 
-This report covers the exploratory MAESTRO validation comparison between:
+This report presents the exploratory MAESTRO validation comparison between:
 
 - **C:** structured attribute heads trained with score influence `0.0`;
 - **D:** structured attribute heads trained with score influence `1.0`.
 
-The three final seeds were `20261108`, `20261109`, and `20261110`. Each run
-scored the same 137 complete validation recordings, in the same order, with no
-piece limit. The comparison is paired and every reported delta is **D minus C**.
+The final runs used seeds `20261108`, `20261109`, and `20261110`. Each run
+evaluated the same 137 complete validation recordings in the same order. All
+comparisons are paired, and each reported difference is **D minus C**.
 
 ## Audit
 
@@ -30,9 +30,10 @@ All three result files passed the following checks:
 The common recording-order SHA-256 is
 `14a962eff0c9a6e02c2d6654edb3110cadc280e51a0e75db952e40a9cfd5a805`.
 
-## Per-seed pre-specified outcomes
+## Results by seed
 
-Intervals are the evaluator's 10,000-replicate paired piece bootstrap intervals.
+Intervals were calculated using 10,000 paired bootstrap samples of the 137
+recordings.
 
 | Seed | Outcome | C macro F1 | D macro F1 | D-C | Paired 95% interval | Improved / declined / tied pieces |
 |---|---|---:|---:|---:|---:|---:|
@@ -50,14 +51,13 @@ The supportive note+velocity outcome was also positive in every seed:
 `+0.000548`, `+0.000346`, and `+0.000751`, respectively. Each corresponding
 paired interval excluded zero.
 
-## Across-seed descriptive summary
+## Summary across seeds
 
-The table below averages each macro result across the three seeds. Its interval
-is an additional descriptive calculation: D-C was first averaged across seeds
-within each of the 137 recordings, then those recordings were resampled 10,000
-times using seed `20261112`. This preserves the recording as the independent
-bootstrap unit and does not treat the three predictions for one recording as
-independent observations.
+The table below averages each macro result across the three seeds. For the
+reported interval, D-C was first averaged across seeds within each recording.
+The 137 recording-level values were then resampled 10,000 times using seed
+`20261112`. This keeps the recording as the unit of analysis instead of treating
+three predictions of the same recording as independent observations.
 
 | Outcome | C precision | C recall | C F1 | D precision | D recall | D F1 | Mean D-C F1 | Seed-averaged piece 95% interval |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -72,13 +72,13 @@ The note-only safeguard also favored D in every seed rather than indicating a
 trade-off. The offset-aware gains reflect increases in both macro precision and
 macro recall.
 
-## Interpretation and frozen next decision
+## Interpretation
 
-These results provide consistent validation-set evidence that allowing the
-trained attributes to influence structured decoding improves full-recording
-transcription relative to the matched post-hoc control. The largest gains are
-on the two offset-aware outcomes, while note-only performance is preserved and
-slightly improved.
+Across the validation set, allowing the trained attributes to affect structured
+decoding improved full-recording transcription relative to the matched post-hoc
+control. The largest differences occurred in the two offset-aware measures.
+Note-only performance was also slightly higher, so the offset gains were not
+accompanied by a note-detection trade-off.
 
 The practical-effect and safeguard thresholds were subsequently approved on
 November 12, 2026 and frozen in `research/PHASE1_TEST_ANALYSIS_PLAN.md`:
@@ -86,15 +86,15 @@ November 12, 2026 and frozen in `research/PHASE1_TEST_ANALYSIS_PLAN.md`:
 - minimum worthwhile note+offset D-C: `+0.0020` macro F1;
 - note-only non-inferiority margin: `-0.0010` macro F1.
 
-Applying that rule to these validation results gives
+Applied retrospectively to the validation results, this rule gives
 `progression_supported`: note+offset D-C is `+0.002465` with interval
 `[+0.001725, +0.003219]`, and the note-only lower bound is `+0.000334`, above
 the `-0.0010` safeguard margin.
 
-This is a retrospective classification of exploratory validation evidence,
-because the numerical thresholds were approved after validation was inspected.
-It supports proceeding to the one-time test analysis but is not independent
-confirmation. The MAESTRO test split remains untouched at this stage.
+This classification is exploratory because the numerical thresholds were
+approved after the validation results had been inspected. It supported moving
+to the one-time test analysis, but it did not constitute independent
+confirmation. The MAESTRO test split had not been evaluated at this point.
 
 ## Local result artifacts
 
@@ -102,5 +102,5 @@ confirmation. The MAESTRO test split remains untouched at this stage.
 - `checkpoint/phase1-C-vs-D-seed-20261109-full-validation.json`
 - `checkpoint/phase1-C-vs-D-seed-20261110-full-validation.json`
 
-These files are intentionally ignored by Git. They contain the complete
-per-recording results and the authoritative per-seed bootstrap summaries.
+These files are ignored by Git and contain the complete recording-level results
+and per-seed bootstrap summaries.

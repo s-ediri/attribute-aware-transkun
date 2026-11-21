@@ -34,6 +34,12 @@ MANIFEST
 /data/
 /datasets/
 /examples/
+#!/examples/
+#/examples/*
+#!/examples/web_app/
+#!/examples/web_app/**
+#/examples/web_app/generated/
+#/examples/web_app/**/__pycache__/
 /checkpoint/
 /20200345*
 /research-results-thesis.pdf
