@@ -1,181 +1,66 @@
-# Phase 1 test analysis plan and decision thresholds
+# Phase 1 corrected-rerun analysis plan
 
 ## Status
 
-**Approved and frozen on November 12, 2026.**
+**Pending corrected training and validation as of November 21, 2026.**
 
-This plan was written after the MAESTRO validation results had been inspected.
-It fixed the procedure for the one-time test analysis, but the numerical
-thresholds were not preregistered before validation.
+The earlier Phase 1 validation and MAESTRO test results were withdrawn because
+the B/C/D systems were initialized from the wrong baseline checkpoint. Their
+checkpoints, generated metrics, frozen hashes, and result reports are not valid
+evidence and must not be cited.
 
-## Approved thresholds
+The corrected baseline is:
 
-Use absolute macro-F1 differences, reported as **D minus C**.
+- checkpoint: `transkun/pretrained/Transkun V2.pt`;
+- checkpoint SHA-256:
+  `76469be487911e110e0e661fadb583645e89c35364faa1ef8897d5600ba6ce20`;
+- config: `transkun/pretrained/Transkun V2.conf`;
+- config SHA-256:
+  `b5f55fdd6fcca19871510bc68151eb1d09ea5e4db59aeeb7cdc59f5977ff950c`.
 
-1. **Minimum worthwhile note+offset improvement:** `+0.0020` F1.
-2. **Note-only non-inferiority margin:** `-0.0010` F1.
+## Corrected-run controls
 
-These values correspond to a required `+0.20` percentage-point improvement in
-the primary offset-aware result and a maximum tolerated `0.10` percentage-point
-loss in note-only F1.
+1. Train B, C, and D again for seeds `20261108`, `20261109`, and `20261110`.
+2. Use the matched budget and data conventions in
+   `experiments/manifests/phase1.json`.
+   Ground-truth note offsets include sustain-pedal extension.
+3. Verify that every checkpoint records the corrected baseline path and SHA-256.
+4. Complete the full-recording validation comparison before freezing any test
+   checkpoint hashes.
+5. Do not run `scripts/run_phase1_c_vs_d_test.ps1` until
+   `experiments/manifests/phase1-test-analysis.json` is repopulated and frozen.
 
-### Rationale
+## Outcomes and decision settings
 
-- The note+offset threshold requires more than a small positive numerical
-  difference, while remaining realistic for a controlled comparison in which C
-  and D share the architecture, training budget, data order, and attribute
-  losses.
-- The note-only margin is deliberately narrower than the required offset-aware
-  gain. It prevents a claimed offset benefit from being purchased with a
-  similarly sized deterioration in basic note detection.
-- The values are simple absolute effect thresholds and do not depend on the
-  number of notes or recordings in the test split.
-- Supervisor approval was required because the validation results were already
-  known. The thresholds could not be changed after viewing any test result.
+To avoid adapting the analysis to previously inspected MAESTRO test results, the
+corrected rerun retains the earlier outcomes and numerical decision settings:
 
-## Frozen systems and checkpoints
+- primary: macro per-piece note+offset F1, D minus C;
+- safeguard: macro per-piece note-only F1, D minus C;
+- supportive: macro per-piece note+velocity+offset F1;
+- minimum worthwhile note+offset difference: `+0.0020`;
+- note-only non-inferiority margin: `-0.0010`;
+- paired recording bootstrap: 10,000 replicates;
+- aggregate seed differences within recording before resampling recordings.
 
-Evaluate only the three matched final seed pairs below. Do not select a single
-best validation seed and do not average model weights.
+Precision and recall accompany every F1 result. Individual notes are not treated
+as independent bootstrap units.
 
-| Seed | C checkpoint SHA-256 | D checkpoint SHA-256 |
-|---|---|---|
-| `20261108` | `1a47a13fd5f91d043bc7b9b831b2f7b0b79172f825e990cba22e6ad17a9bcca0` | `8d0f4d50b095e92b68fc1cd1524b9fa78a5cae20e788114f03776326c552fa34` |
-| `20261109` | `62f3359bef39e767bf5e0474eea6898a5c976aacc8f21ffc730ad6f66c108848` | `af43f72b920af1a026fc150a7806425241c76fbbbc41c2a18c8aab0873f18407` |
-| `20261110` | `937046318dbce19257f1b2772de197a6328fb77fbba0d754cdc428f61a535e93` | `b4499b1b31623ec2b5141cd74de3986342ea77df88ac5aaf77b44e0971a101ce` |
+## Test-split disclosure
 
-Frozen configs:
+The MAESTRO test split was already evaluated during the withdrawn run. Therefore,
+the corrected test rerun is a disclosed protocol-correction analysis, not
+pristine first access. No threshold, outcome, checkpoint-selection rule, metric,
+or bootstrap setting may be changed in response to the withdrawn test values.
 
-- C: `experiments/configs/posthoc_attributes.conf`, SHA-256
-  `a5a7d04ed249ba00348dc3b8bea7fd4c0cf78c3ac9749886fddb4fce1f7f448a`;
-- D: `experiments/configs/joint_attributes.conf`, SHA-256
-  `08a5952bc906738c3ca150c64b0778f4e8d7c46cd223f0ee63affcf49859daad`.
+## Freeze requirements
 
-## Frozen outcomes
+After corrected validation is complete and before the corrected test rerun:
 
-### Primary outcome
-
-Macro per-piece **note+offset F1**.
-
-### Safeguard
-
-Macro per-piece **note-only F1**.
-
-### Key supportive outcome
-
-Macro per-piece **note+velocity+offset F1**.
-
-Precision and recall must accompany every F1 result. Note+velocity F1 may be
-reported as descriptive support but is not part of the success rule.
-
-## Frozen aggregation
-
-For each metric:
-
-1. Score every complete test recording independently for C and D under each of
-   the three matched seeds.
-2. Compute the per-recording F1 difference, D minus C, separately for each seed.
-3. Average the three seed-specific differences within each recording.
-4. Take the unweighted mean of those recording-level averages as the primary
-   aggregate effect. Every recording receives equal weight.
-5. Compute C and D macro precision, recall, and F1 by first taking the per-seed
-   macro over recordings and then averaging those three seed macros.
-
-This treats the three seeds as repeated realisations of
-procedure while retaining the recording as the independent evaluation unit. In
-addition to the aggregate result, report every seed separately as a sensitivity
-analysis.
-
-## Frozen uncertainty procedure
-
-Use a paired recording-level percentile bootstrap:
-
-- bootstrap unit: complete recording;
-- replicates: `10,000`;
-- random seed: `20261112`;
-- resample the test recording indices with replacement;
-- preserve all six C/D predictions for a selected recording;
-- within each replicate, average D-C across seeds within recording and then
-  average across sampled recordings;
-- interval: 2.5th and 97.5th percentiles.
-
-Do not bootstrap individual notes. Do not pool the three seed-by-recording rows
-as independent observations.
-
-## Decision rule
-
-Classify Phase 1 as supporting progression only if **both** conditions hold on
-the one-time MAESTRO test analysis:
-
-1. **Primary benefit:**
-   - aggregate note+offset D-C is at least `+0.0020`; and
-   - the paired 95% bootstrap interval has a lower bound greater than `0`.
-2. **Note-only safeguard:**
-   - the lower bound of the paired 95% bootstrap interval for note-only D-C is
-     greater than `-0.0010`.
-
-The effect threshold represents practical importance, while the interval
-condition represents uncertainty. Both primary-benefit requirements must pass.
-
-### Outcome labels
-
-- **Progression supported:** both conditions above pass.
-- **Offset improvement detected but below the worthwhile threshold:** the
-  note+offset interval excludes zero, but D-C is below `+0.0020`, while the
-  safeguard passes.
-- **Inconclusive:** the safeguard passes, but the note+offset interval includes
-  zero.
-- **Safeguard failed:** the note-only interval lower bound is at or below
-  `-0.0010`, regardless of the offset result.
-- **Negative result:** the note+offset effect is non-positive and its interval
-  does not support improvement.
-
-## Multiplicity and interpretation
-
-Progression requires both the primary note+offset condition and the note-only
-safeguard. No additional multiplicity correction is applied to this joint rule.
-The note+velocity+offset result, note+velocity result, per-seed results, and
-stratified analyses are supportive or exploratory and cannot override a failed
-primary decision.
-
-## Pre-specified strata
-
-Retain the strata already listed in `research/PROTOCOL.md`:
-
-- reference duration: `<250 ms`, `250-500 ms`, `500 ms-1 s`, `>=1 s`;
-- reference velocity: `<=40`, `41-80`, `>=81`;
-- pitch: `<=48`, `49-72`, `>=73`;
-- pedal active/inactive;
-- local polyphony;
-- repeated same-pitch notes;
-- recording.
-
-Stratum analyses are explanatory and cannot change the primary decision. Any
-stratum implementation that is not complete before test access must be omitted
-from the one-time confirmatory analysis rather than improvised afterward.
-
-## Test-access controls
-
-Before the test run:
-
-1. Record supervisor approval and approval date below.
-2. Confirm test metadata SHA-256 without examining metric results.
-3. Finalize and test the aggregation script using validation artifacts only.
-4. Commit the approved document and analysis code with a clean worktree.
-5. Run the test evaluation once for all three seed pairs.
-6. Do not alter thresholds, checkpoints, metrics, bootstrap settings, or strata
-   after test access.
-
-If an infrastructure failure occurs, resume only under an identical hashed
-protocol. Code changes after partial test access require documenting the defect,
-showing that no scientific choice was informed by the partial result, and
-restarting all affected runs under one corrected revision.
-
-## Approval
-
-- Approver: **Project owner/user; personal name not supplied**
-- Decision: **Approved as recommended**
-- Approval date: **November 12, 2026**
-- Approved minimum worthwhile note+offset effect: **`+0.0020` macro F1**
-- Approved note-only non-inferiority margin: **`-0.0010` macro F1**
-- Notes: **Approval recorded before accessing MAESTRO test metrics.**
+1. record all six corrected C/D checkpoint paths and SHA-256 values;
+2. record corrected C/D config hashes;
+3. record evaluator, aggregator, and launcher hashes;
+4. verify test metadata identity without examining new metrics;
+5. set the test manifest status to
+   `approved_and_frozen_before_test_metrics` in a clean committed revision;
+6. execute all three corrected test seed pairs under that revision.

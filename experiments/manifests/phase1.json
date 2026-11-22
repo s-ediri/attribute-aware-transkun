@@ -2,15 +2,17 @@
   "protocol": "research/PROTOCOL.md",
   "dataset": {
     "root": "datasets/maestro-v3.0.0-44100",
-    "train_metadata": "datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle",
-    "train_metadata_sha256": "2fff5f2f45e479b545b8f9b892464ca2861664a241644be2433ff088872ad118",
-    "validation_metadata": "datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle",
-    "validation_metadata_sha256": "56f5aa73449e3be90180ab7e45ceebad9b0710d4027a2be5b03827db6de06223",
-    "pedal_extension": false
+    "train_metadata": "datasets/maestro-v3.0.0-44100/metadata-pedal-extension/train.pickle",
+    "train_metadata_sha256": "7615df8e11c289493c66179b0507a13f6714e765c0c26663f1fab41113f349b5",
+    "validation_metadata": "datasets/maestro-v3.0.0-44100/metadata-pedal-extension/val.pickle",
+    "validation_metadata_sha256": "0f77c4024087d4871f4842f0c45766cdbfe70d534244974ee890cc5e766d85c2",
+    "pedal_extension": true
   },
   "initialization": {
-    "checkpoint": "transkun/pretrained/2.0.pt",
-    "sha256": "50a80010effc2a59ffcd068a95cd2b29bd7f23a27a3515bc3ccd209c89a3d44c"
+    "checkpoint": "transkun/pretrained/Transkun V2.pt",
+    "checkpoint_sha256": "76469be487911e110e0e661fadb583645e89c35364faa1ef8897d5600ba6ce20",
+    "config": "transkun/pretrained/Transkun V2.conf",
+    "config_sha256": "b5f55fdd6fcca19871510bc68151eb1d09ea5e4db59aeeb7cdc59f5977ff950c"
   },
   "matched_training": {
     "n_processes": 1,

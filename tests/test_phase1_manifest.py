@@ -17,6 +17,7 @@ class PhaseOneManifestTest(unittest.TestCase):
         self.assertEqual(
             manifest["matched_training"]["seeds"],
             [20261108, 20261109, 20261110])
+        self.assertTrue(manifest["dataset"]["pedal_extension"])
         for system in manifest["systems"].values():
             self.assertTrue((REPOSITORY_ROOT / system["config"]).is_file())
 
@@ -33,15 +34,28 @@ class PhaseOneManifestTest(unittest.TestCase):
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             self.assertEqual(digest, manifest["dataset"][hash_key])
 
-    def test_test_analysis_manifest_is_frozen_and_hashes_match(self):
+    def test_corrected_initialization_files_and_hashes_match(self):
+        manifest = json.loads(
+            (REPOSITORY_ROOT / "experiments/manifests/phase1.json").read_text(
+                encoding="utf-8"))
+        initialization = manifest["initialization"]
+        for path_key, hash_key in (
+                ("checkpoint", "checkpoint_sha256"),
+                ("config", "config_sha256")):
+            path = REPOSITORY_ROOT / initialization[path_key]
+            self.assertTrue(path.is_file(), path)
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(digest, initialization[hash_key], path_key)
+
+    def test_test_analysis_manifest_is_pending_corrected_runs(self):
         manifest = json.loads((
             REPOSITORY_ROOT / "experiments/manifests/phase1-test-analysis.json"
         ).read_text(encoding="utf-8"))
 
+        self.assertEqual(
+            manifest["status"], "pending_corrected_training_and_validation")
         self.assertEqual(manifest["dataset"]["split"], "test")
-        self.assertIsNone(manifest["evaluation"]["limit"])
-        self.assertEqual(set(manifest["seeds"]), {
-            "20261108", "20261109", "20261110"})
+        self.assertEqual(manifest["seeds"], {})
         self.assertEqual(
             manifest["decision"]["minimum_worthwhile_note_offset_effect"],
             0.002)
@@ -49,26 +63,10 @@ class PhaseOneManifestTest(unittest.TestCase):
             manifest["decision"]["note_only_noninferiority_margin"],
             -0.001)
 
-        declared_files = [
-            (manifest["dataset"]["metadata"],
-             manifest["dataset"]["metadata_sha256"]),
-            (manifest["evaluation"]["driver"],
-             manifest["evaluation"]["driver_sha256"]),
-            (manifest["evaluation"]["aggregator"],
-             manifest["evaluation"]["aggregator_sha256"]),
-            (manifest["evaluation"]["launcher"],
-             manifest["evaluation"]["launcher_sha256"]),
-            (manifest["configs"]["C"]["path"],
-             manifest["configs"]["C"]["sha256"]),
-            (manifest["configs"]["D"]["path"],
-             manifest["configs"]["D"]["sha256"]),
-        ]
-        for relative_path, expected_hash in declared_files:
-            path = REPOSITORY_ROOT / relative_path
-            if not path.exists():
-                self.skipTest(f"Frozen input is unavailable: {path}")
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            self.assertEqual(digest, expected_hash, relative_path)
+        metadata = REPOSITORY_ROOT / manifest["dataset"]["metadata"]
+        if metadata.exists():
+            digest = hashlib.sha256(metadata.read_bytes()).hexdigest()
+            self.assertEqual(digest, manifest["dataset"]["metadata_sha256"])
 
 
 if __name__ == "__main__":

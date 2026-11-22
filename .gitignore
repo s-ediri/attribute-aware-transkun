@@ -1,6 +1,8 @@
 # Local model/data artifacts. The packaged checkpoint is already tracked and
 # remains tracked even though new checkpoint files are ignored.
 *.pt
+!Transkun V2.pt
+
 *.pickle
 # Byte-compiled / optimized / DLL files
 __pycache__/

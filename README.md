@@ -40,8 +40,8 @@ python scripts/smoke_training_step.py `
   --system-id B `
   --config experiments/configs/legacy_finetune.conf `
   --dataset-path datasets/maestro-v3.0.0-44100 `
-  --metadata datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle `
-  --pretrained-checkpoint transkun/pretrained/2.0.pt `
+  --metadata datasets/maestro-v3.0.0-44100/metadata-pedal-extension/train.pickle `
+  --pretrained-checkpoint "transkun/pretrained/Transkun V2.pt" `
   --strict-pretrained `
   --seed 20261108
 ```
@@ -77,10 +77,9 @@ To use CUDA:
 $ transkun input.mp3 output.mid --device cuda
 ```
 
-**Note:** The checkpoint distributed with the package was trained **without
-sustain-pedal extension** and **with data augmentation**. Some earlier piano
-transcription work extends note offsets by the sustain-pedal duration, so results
-using the two conventions are not directly equivalent. See [Model
+**Note:** This repository currently selects the `Transkun V2` checkpoint, whose
+reference convention includes sustain-pedal extension. Results using the
+separate `No Ext` convention are not directly equivalent. See [Model
 Cards](#model-cards) for the checkpoints reported in the papers.
 
 **Colab Notebook** [Colab](https://colab.research.google.com/drive/1XuFNdYbcHBy3OyGCmtt2UGa2-PXjkJeo?usp=sharing)
@@ -193,7 +192,9 @@ $ transkun input.mp3 output.mid
 * onset deviations on MAPS deviates strongly from a Normal distribution, suggesting potential annotation issues.  ad hoc align is used to fix this bias. Offset deviations are still abnormal after this correction.
 * Aug means the model is trained with data augmentation
 * No Ext means without pedal extension
-* The default checkpoint shipped with the code/pip package is Transkun V2 No Pedal Ext. Currently it is fine-tuned from Transkun V2 Aug, will train from scratch in the future.
+* This research checkout uses Transkun V2 with pedal extension as its default
+  baseline. The separately reported `No Ext` model remains a different
+  annotation convention.
 * There's some minor bug fixes since the paper, the results listed here reflect the latest version which may differ slightly from the paper.
 
 ## Handling the dataset
@@ -251,14 +252,14 @@ number of optimizer steps; training validates and saves the checkpoint at that
 step before exiting. Set `--dataLoaderWorkers 0` if worker-side WAV memory
 mapping exhausts the Windows paging file.
 
-After resampling the 2017 and 2018 MAESTRO audio to 44.1 kHz, generate
-no-pedal-extension metadata with:
+After resampling the 2017 and 2018 MAESTRO audio to 44.1 kHz, generate metadata
+with sustain-pedal extension using the default behavior:
 
 ```bash
-python3 -m transkun.createDatasetMaestro --noPedalExtension \
+python3 -m transkun.createDatasetMaestro \
   datasets/maestro-v3.0.0-44100 \
   datasets/maestro-v3.0.0-44100/maestro-v3.0.0.csv \
-  datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension
+  datasets/maestro-v3.0.0-44100/metadata-pedal-extension
 ```
 
 The training copy should preserve the original manifest-relative directory
@@ -270,10 +271,10 @@ python3 -m transkun.train checkpoint/structured-attributes.pt \
   --seed 20261108 \
   --systemId D \
   --datasetPath datasets/maestro-v3.0.0-44100 \
-  --datasetMetaFile_train datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/train.pickle \
-  --datasetMetaFile_val datasets/maestro-v3.0.0-44100/metadata-no-pedal-extension/val.pickle \
-  --modelConf transkun/pretrained/2.0.conf \
-  --pretrainedCheckpoint transkun/pretrained/2.0.pt
+  --datasetMetaFile_train datasets/maestro-v3.0.0-44100/metadata-pedal-extension/train.pickle \
+  --datasetMetaFile_val datasets/maestro-v3.0.0-44100/metadata-pedal-extension/val.pickle \
+  --modelConf "transkun/pretrained/Transkun V2.conf" \
+  --pretrainedCheckpoint "transkun/pretrained/Transkun V2.pt"
 ```
 
 ## The Evaluation Module

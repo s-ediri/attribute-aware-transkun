@@ -256,14 +256,14 @@ def resolve_sides(args):
             "--candidate-checkpoint flags with explicit left/right flags")
 
     if compatibility_mode or not explicit_mode:
-        config = args.config or Path("transkun/pretrained/2.0.conf")
+        config = args.config or Path("transkun/pretrained/Transkun V2.conf")
         return {
             "left": {
                 "label": "baseline",
                 "model_kind": "historical",
                 "config": config,
                 "checkpoint": args.baseline_checkpoint
-                or Path("transkun/pretrained/2.0.pt"),
+                or Path("transkun/pretrained/Transkun V2.pt"),
             },
             "right": {
                 "label": "fine_tuned_10000",
@@ -390,6 +390,10 @@ def build_parser():
     parser.add_argument("--device", default=None)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--no-pedal-extension", dest="pedal_extension", action="store_false",
+        help="declare that the supplied reference metadata has no pedal extension")
+    parser.set_defaults(pedal_extension=True)
     return parser
 
 
@@ -440,7 +444,7 @@ def main():
             "onset_tolerance_seconds": 0.05,
             "offset_ratio": 0.2,
             "offset_min_tolerance_seconds": 0.05,
-            "pedal_extension": False,
+            "pedal_extension": args.pedal_extension,
             "aggregation": "macro mean of per-piece F1",
         },
         "transcription": {

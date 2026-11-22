@@ -113,7 +113,7 @@ def build_run_metadata(args, model_module, model_config, seed):
             "optimizer_steps": args.nIter,
             "augmentation": bool(args.augment),
             "strict_pretrained": bool(args.strictPretrained),
-            "pedal_extension": False,
+            "pedal_extension": bool(args.pedalExtension),
         },
         "dataset_root": str(pathlib.Path(args.datasetPath).resolve()),
         "files": files,
@@ -613,6 +613,10 @@ if __name__ == '__main__':
     parser.add_argument('--datasetPath', required = True)
     parser.add_argument('--datasetMetaFile_train', required = True)
     parser.add_argument('--datasetMetaFile_val', required = True)
+    parser.add_argument(
+            '--noPedalExtension', dest='pedalExtension', action='store_false',
+            help="declare that the supplied metadata does not extend note offsets by sustain pedal")
+    parser.set_defaults(pedalExtension=True)
 
     parser.add_argument('--batchSize', default=4, type=int)
     parser.add_argument('--hopSize', required=False, type=float)

@@ -55,6 +55,9 @@ def main():
     parser.add_argument("--seed", type=int, default=20261108)
     parser.add_argument("--chunk-size", type=float, default=16.0)
     parser.add_argument("--device", default="cpu")
+    parser.add_argument(
+        "--no-pedal-extension", dest="pedal_extension", action="store_false")
+    parser.set_defaults(pedal_extension=True)
     args = parser.parse_args()
 
     if args.limit < 1:
@@ -106,7 +109,8 @@ def main():
             "window_count": len(batches),
             "chunk_size_seconds": args.chunk_size,
             "seed": args.seed,
-            "pedal_events_excluded": True,
+            "pedal_extension": args.pedal_extension,
+            "pedal_events_excluded_from_attribute_scoring": True,
             "timing_scored_only_when_boundary_present": True,
             "duration_strata_require_complete_onset_and_offset": True,
             "calibration_bins": 10,

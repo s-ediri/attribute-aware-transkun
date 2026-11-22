@@ -10,6 +10,10 @@ Set-Location -LiteralPath $RepositoryRoot
 $ManifestPath = Join-Path $RepositoryRoot 'experiments\manifests\phase1-test-analysis.json'
 $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
 
+if ($Manifest.status -ne 'approved_and_frozen_before_test_metrics') {
+    throw "Phase 1 test manifest is not frozen for execution: $($Manifest.status)"
+}
+
 function Resolve-RepositoryPath([string]$RelativePath) {
     return Join-Path $RepositoryRoot ($RelativePath -replace '/', '\')
 }

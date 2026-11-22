@@ -57,7 +57,7 @@ def build_metadata(args, model_module, model_config):
             "optimizer_steps": args.schedule_steps,
             "augmentation": False,
             "strict_pretrained": args.strict_pretrained,
-            "pedal_extension": False,
+            "pedal_extension": args.pedal_extension,
             "gradient_clip_norm": args.gradient_clip_norm,
             "deterministic_indexed_samples": True,
         },
@@ -161,6 +161,10 @@ def main():
     parser.add_argument("--gradient-clip-norm", type=float, default=40.0)
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--strict-pretrained", action="store_true")
+    parser.add_argument(
+        "--no-pedal-extension", dest="pedal_extension", action="store_false",
+        help="declare that the supplied metadata has no sustain-pedal extension")
+    parser.set_defaults(pedal_extension=True)
     args = parser.parse_args()
 
     if args.target_steps < 1:

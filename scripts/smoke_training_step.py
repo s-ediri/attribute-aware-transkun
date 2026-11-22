@@ -35,6 +35,9 @@ def main():
     parser.add_argument("--chunk-size", type=float, default=2.0)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--strict-pretrained", action="store_true")
+    parser.add_argument(
+        "--no-pedal-extension", dest="pedal_extension", action="store_false")
+    parser.set_defaults(pedal_extension=True)
     args = parser.parse_args()
 
     seed_everything(args.seed)
@@ -70,6 +73,7 @@ def main():
         "system_id": args.system_id,
         "model_module": configuration["Model"].module.__name__,
         "seed": args.seed,
+        "pedal_extension": args.pedal_extension,
         "audio_shape": list(audio.shape),
         "note_count": len(sample["notes"]),
         "log_probability_shape": list(log_probability.shape),

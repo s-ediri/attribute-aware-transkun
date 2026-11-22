@@ -4,17 +4,16 @@ This directory contains the protocol and reports for the thesis experiments.
 
 - `PROTOCOL.md` sets out the research question, systems, outcomes, data-use
   rules, and conditions for moving to Phase 2.
-- `PHASE1_C_VS_D_VALIDATION.md` reports the three-seed, full-recording MAESTRO
-  validation comparison completed before the test analysis.
-- `PHASE1_C_VS_D_TEST.md` reports the one-time MAESTRO test result and the final
-  decision under the approved practical-effect rule.
-- `PHASE1_TEST_ANALYSIS_PLAN.md` records the thresholds and analysis procedure
-  that were fixed before the test split was evaluated.
+- The earlier Phase 1 validation and test reports were removed on November 21,
+  2026 after discovering that training used the wrong baseline checkpoint.
+- `PHASE1_TEST_ANALYSIS_PLAN.md` records the corrected-rerun controls and the
+  disclosure required because the test split was accessed during the withdrawn
+  run.
 - `../experiments/configs/` contains tracked model configurations.
 - `../experiments/manifests/phase1.json` freezes the matched B/C/D training
   settings, seeds, dataset metadata hashes, and initialization checkpoint hash.
-- `../experiments/manifests/phase1-test-analysis.json` freezes the approved
-  one-time MAESTRO test inputs, hashes, outputs, and decision settings.
+- `../experiments/manifests/phase1-test-analysis.json` remains pending until the
+  corrected C/D checkpoints have completed validation and can be frozen.
 - `../scripts/` contains reproducible evaluation drivers.
 - `../scripts/aggregate_phase1_c_vs_d.py` applies the approved three-seed
   aggregation, bootstrap, and decision rule.

@@ -45,6 +45,9 @@ class FullValidationEvaluationTest(unittest.TestCase):
         common = ["--dataset-path", "dataset", "--metadata", "metadata"]
 
         self.assertEqual(parser.parse_args(common).split, "validation")
+        self.assertTrue(parser.parse_args(common).pedal_extension)
+        self.assertFalse(parser.parse_args(
+            common + ["--no-pedal-extension"]).pedal_extension)
         self.assertEqual(
             parser.parse_args(common + ["--split", "test"]).split, "test")
         self.assertEqual(evaluation_name("validation"), "full_piece_paired_validation")

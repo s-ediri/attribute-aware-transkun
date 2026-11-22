@@ -36,8 +36,10 @@ strictly load the packaged checkpoint.
 ## Fixed training conventions for the first comparison
 
 - Dataset: MAESTRO v3 prepared at 44.1 kHz.
-- Ground-truth sustain-pedal extension: disabled.
-- Initialization: packaged `transkun/pretrained/2.0.pt` where compatible.
+- Ground-truth sustain-pedal extension: included using MAESTRO sustain control
+  changes (CC64).
+- Initialization: packaged `transkun/pretrained/Transkun V2.pt` with
+  `transkun/pretrained/Transkun V2.conf` where compatible.
 - Optimizer-step budget: identical for B, C, and D.
 - Seeds: `20261108`, `20261109`, and `20261110` for final runs.
 - Data order, augmentation policy, batch size, learning-rate schedule, and
@@ -54,6 +56,11 @@ strictly load the packaged checkpoint.
 - Freeze the method, checkpoint rule, metrics, and strata before evaluating the
   MAESTRO test split. Evaluate that split once for the final analysis.
 - Do not choose new weights or checkpoints from partial full-piece results.
+- The earlier Phase 1 run initialized from the wrong checkpoint and was
+  withdrawn on November 21, 2026. The corrected run must retain the declared
+  seeds, outcomes, and analysis procedure. Because the MAESTRO test split was
+  already inspected during the withdrawn run, the corrected test rerun is a
+  disclosed protocol-correction analysis rather than pristine first access.
 
 ## Primary outcomes
 
