@@ -23,6 +23,10 @@ This directory contains the protocol and reports for the thesis experiments.
   updating weights and should pass for B, C, and D before full training.
 - `../scripts/optimizer_pilot.py` runs bounded real optimizer updates, saves a
   metadata-bearing checkpoint, and supports deterministic infrastructure resume.
+- Full controlled training writes atomic checkpoints every 500 optimizer steps
+  and restores the exact next deterministic batch plus RNG and clipping state
+  after interruption. Checkpoints created before this support was added are not
+  accepted for final-run resume.
 - `../scripts/evaluate_reference_attributes.py` evaluates velocity, timing, and
   boundary-presence heads on reference intervals, independently of detection.
 - `../checkpoint/` is kept local and ignored by Git. It contains model

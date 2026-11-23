@@ -44,6 +44,11 @@ strictly load the packaged checkpoint.
 - Seeds: `20261108`, `20261109`, and `20261110` for final runs.
 - Data order, augmentation policy, batch size, learning-rate schedule, and
   checkpoint selection rule must match across B, C, and D.
+- Training uses the deterministic order already constructed by the seeded
+  MAESTRO iterator, without a second DataLoader shuffle. Checkpoints are written
+  atomically every 500 completed optimizer steps and preserve the next batch
+  cursor, RNG streams, adaptive clipping history, and partial-epoch losses for
+  exact single-process mid-epoch resume.
 - Development runs must be labelled and cannot replace the final-seed runs.
 
 ## Data-use rules

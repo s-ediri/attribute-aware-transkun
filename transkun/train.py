@@ -70,6 +70,69 @@ def scheduler_warmup_complete(global_step, warmup_steps=500):
     return global_step > warmup_steps
 
 
+def periodic_checkpoint_due(completed_steps, interval_steps=500):
+    """Return whether a durable checkpoint is due after an optimizer step."""
+    return completed_steps > 0 and completed_steps % interval_steps == 0
+
+
+def remaining_epoch_indices(dataset_length, batch_size, next_batch):
+    """Return deterministic sample indices beginning at the saved batch cursor."""
+    usable_samples = dataset_length - (dataset_length % batch_size)
+    first_sample = next_batch * batch_size
+    if first_sample > usable_samples:
+        raise ValueError("Checkpoint batch cursor exceeds the epoch length")
+    return range(first_sample, usable_samples)
+
+
+def capture_rng_state():
+    """Capture process RNG streams required for an exact single-process resume."""
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch": torch.get_rng_state(),
+        "cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+    }
+
+
+def restore_rng_state(state):
+    """Restore process RNG streams from a controlled-training checkpoint."""
+    if not state:
+        raise ValueError("Checkpoint has no RNG state for exact resume")
+    random.setstate(state["python"])
+    np.random.set_state(state["numpy"])
+    torch.set_rng_state(state["torch"].cpu())
+    if state["cuda"] is not None and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all([item.cpu() for item in state["cuda"]])
+
+
+def build_training_state(epoch, next_batch, grad_norm_history, epoch_losses):
+    """Build the mutable state needed to continue at the exact next batch."""
+    return {
+        "schema_version": 1,
+        "epoch": int(epoch),
+        "next_batch": int(next_batch),
+        "grad_norm_history": grad_norm_history.state_dict(),
+        "epoch_losses": list(epoch_losses),
+        "rng_state": capture_rng_state(),
+    }
+
+
+def restore_training_state(state, start_epoch):
+    """Restore mutable training state and return cursor, clip history, and losses."""
+    if not state:
+        raise ValueError(
+                "Checkpoint predates exact-resume support and cannot be resumed "
+                "by the controlled experiment workflow")
+    if state.get("schema_version") != 1:
+        raise ValueError("Unsupported training-state schema")
+    if state.get("epoch") != start_epoch:
+        raise ValueError("Checkpoint epoch and training-state epoch do not match")
+    grad_norm_history = MovingBuffer()
+    grad_norm_history.load_state_dict(state["grad_norm_history"])
+    restore_rng_state(state["rng_state"])
+    return state["next_batch"], grad_norm_history, list(state["epoch_losses"])
+
+
 def checkpoint_resume_epoch(current_epoch, epoch_complete):
     """Return the zero-based epoch where training should resume.
 
@@ -114,6 +177,8 @@ def build_run_metadata(args, model_module, model_config, seed):
             "augmentation": bool(args.augment),
             "strict_pretrained": bool(args.strictPretrained),
             "pedal_extension": bool(args.pedalExtension),
+            "deterministic_data_order": True,
+            "checkpoint_interval_steps": 500,
         },
         "dataset_root": str(pathlib.Path(args.datasetPath).resolve()),
         "files": files,
@@ -187,6 +252,9 @@ def resolve_run_metadata(filename, proposed):
 
 
 def train(workerId, nWorker, filename, runSeed, args):
+    if nWorker != 1:
+        raise ValueError(
+                "Exact controlled training currently requires --nProcess 1")
     if args.pretrainedCheckpoint is not None:
         if os.path.exists(filename):
             raise FileExistsError(
@@ -251,13 +319,18 @@ def train(workerId, nWorker, filename, runSeed, args):
             save_checkpoint(
                     filename, startEpoch, startIter, model, lossTracker,
                     best_state_dict, optimizer, lrScheduler,
-                    metadata=runMetadata)
+                    metadata=runMetadata,
+                    training_state=build_training_state(
+                            startEpoch, 0, MovingBuffer(initValue=40, maxLen=10000),
+                            []))
 
     if parallel:
         dist.barrier()
         
 
-    startEpoch, startIter, model,  lossTracker, best_state_dict, optimizer, lrScheduler= load_checkpoint(TransKun, conf, filename,device)
+    (startEpoch, startIter, model, lossTracker, best_state_dict, optimizer,
+     lrScheduler, savedTrainingState) = load_checkpoint(
+             TransKun, conf, filename, device, return_training_state=True)
     print(
             "Worker {} loaded checkpoint at step {}/{}.".format(
                     workerId, startIter, args.nIter))
@@ -267,6 +340,9 @@ def train(workerId, nWorker, filename, runSeed, args):
         if parallel:
             dist.destroy_process_group()
         return
+
+    startBatch, gradNormHist, resumedEpochLosses = restore_training_state(
+            savedTrainingState, startEpoch)
 
     if workerId == 0:
         print("Loading training and validation datasets...")
@@ -282,7 +358,7 @@ def train(workerId, nWorker, filename, runSeed, args):
 
 
     if workerId == 0:
-        writer = SummaryWriter(filename+".log")
+        writer = SummaryWriter(filename+".log", purge_step=startIter)
 
     globalStep = startIter
     # create dataloader
@@ -293,8 +369,6 @@ def train(workerId, nWorker, filename, runSeed, args):
 
     hopSize = args.hopSize
     chunkSize = args.chunkSize
-
-    gradNormHist = MovingBuffer(initValue = 40, maxLen = 10000)
 
     augmentator = None
     if args.augment:
@@ -315,25 +389,30 @@ def train(workerId, nWorker, filename, runSeed, args):
         # average length will be chunkSize
         dataIter = Data.DatasetMaestroIterator(dataset, hopSize, chunkSize, seed = epoc*100+runSeed, augmentator = augmentator, notesStrictlyContained=False)
 
-        if parallel:
-            sampler = torch.utils.data.distributed.DistributedSampler(dataIter)
-            sampler.set_epoch(epoc)
-            # dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn, num_workers=args.dataLoaderWorkers, sampler = sampler, drop_last = True, prefetch_factor = 3)
-            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, sampler = sampler, drop_last = True, **dataLoaderOptions)
-        else:
-            dataloader= torch.utils.data.DataLoader(dataIter, batch_size = batchSize, collate_fn = Data.collate_fn_batching, shuffle=True, drop_last=True, **dataLoaderOptions)
+        epochStartBatch = startBatch if epoc == startEpoch else 0
+        totalEpochBatches = len(dataIter) // batchSize
+        remainingIndices = remaining_epoch_indices(
+                len(dataIter), batchSize, epochStartBatch)
+        remainingData = torch.utils.data.Subset(dataIter, remainingIndices)
+        loaderGenerator = torch.Generator()
+        loaderGenerator.manual_seed(runSeed + epoc * 100 + 1)
+        dataloader = torch.utils.data.DataLoader(
+                remainingData, batch_size=batchSize,
+                collate_fn=Data.collate_fn_batching, shuffle=False,
+                drop_last=True, generator=loaderGenerator, **dataLoaderOptions)
 
 
-        lossAll = []
+        lossAll = list(resumedEpochLosses) if epoc == startEpoch else []
 
         # curLRScheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr = 5e-5, max_lr = 1e-4, step_size_up = len(dataloader)//10*5, step_size_down = len(dataloader)//10*5, cycle_momentum=False)
         for idx, batch in enumerate(dataloader):
+            absoluteBatch = epochStartBatch + idx
             if workerId ==0:
                 currentLR = [p["lr"] for p in optimizer.param_groups][0]
                 writer.add_scalar(f'Optimizer/lr', currentLR , globalStep)
 
             computeStats = False 
-            if idx % 40 == 0:
+            if absoluteBatch % 40 == 0:
                 computeStats =True
 
 
@@ -457,7 +536,7 @@ def train(workerId, nWorker, filename, runSeed, args):
                         "lossPerSecond:{:.4f} learningRate:{:.2e} "
                         "gradNorm:{:.2f} clipThreshold:{:.2f} batchTime:{:.2f}s".format(
                                 epoc + 1,
-                                100 * (idx + 1) / len(dataloader),
+                                100 * (absoluteBatch + 1) / totalEpochBatches,
                                 globalStep + 1, args.nIter, loss.item(),
                                 currentLR, totalNorm.item(), curClipValue, t2 - t1))
                 writer.add_scalar(f'Loss/train', loss.item(), globalStep)
@@ -517,16 +596,21 @@ def train(workerId, nWorker, filename, runSeed, args):
                 lossAll.append(loss.item())
 
 
-                if idx%2000 ==1999:
+                completedSteps = globalStep + 1
+                nextBatch = absoluteBatch + 1
+                if (completedSteps < args.nIter
+                        and periodic_checkpoint_due(completedSteps)):
                     save_checkpoint(
                             filename,
                             checkpoint_resume_epoch(epoc, epoch_complete=False),
-                            globalStep+1, model, lossTracker,
+                            completedSteps, model, lossTracker,
                             best_state_dict, optimizer, lrScheduler,
-                            metadata=runMetadata)
+                            metadata=runMetadata,
+                            training_state=build_training_state(
+                                    epoc, nextBatch, gradNormHist, lossAll))
                     print(
                             "Checkpoint saved at step {}/{}: {}".format(
-                                    globalStep + 1, args.nIter, filename))
+                                    completedSteps, args.nIter, filename))
 
             globalStep+= 1
             if globalStep >= args.nIter:
@@ -549,7 +633,10 @@ def train(workerId, nWorker, filename, runSeed, args):
             samplerVal = torch.utils.data.distributed.DistributedSampler(dataIterVal)
             dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=dataLoaderWorkers, sampler = samplerVal)
         else:
-            dataloaderVal= torch.utils.data.DataLoader(dataIterVal, batch_size = 2*batchSize, collate_fn = Data.collate_fn , num_workers=dataLoaderWorkers, shuffle=True)
+            dataloaderVal= torch.utils.data.DataLoader(
+                    dataIterVal, batch_size=2*batchSize,
+                    collate_fn=Data.collate_fn, num_workers=dataLoaderWorkers,
+                    shuffle=False)
 
         model.eval()
         valResult = doValidation(model, dataloaderVal, parallel = parallel, device = device)
@@ -586,7 +673,10 @@ def train(workerId, nWorker, filename, runSeed, args):
                     checkpoint_resume_epoch(epoc, epoch_complete=True),
                     globalStep, model, lossTracker,
                     best_state_dict, optimizer, lrScheduler,
-                    metadata=runMetadata)
+                    metadata=runMetadata,
+                    training_state=build_training_state(
+                            checkpoint_resume_epoch(epoc, epoch_complete=True),
+                            0, gradNormHist, []))
 
         if trainingComplete:
             break
@@ -654,6 +744,9 @@ if __name__ == '__main__':
 
     if args.nIter < 1:
         parser.error("--nIter must be a positive number of optimizer steps")
+    if args.nProcess != 1:
+        parser.error(
+                "controlled exact-resume training currently requires --nProcess 1")
     if args.pretrainedCheckpoint is not None:
         if not os.path.isfile(args.pretrainedCheckpoint):
             parser.error(

@@ -5,6 +5,9 @@ import torch_optimizer as optim
 import torch.nn as nn
 import numpy as np
 import copy
+import os
+import pathlib
+import tempfile
 from .LayersTransformer import LearnableSpatialPositionEmbedding
 
 
@@ -23,6 +26,13 @@ class MovingBuffer:
     
     def getQuantile(self, quantile):
         return float(np.quantile(self.values, q = quantile))
+
+    def state_dict(self):
+        return {"values": list(self.values), "maxlen": self.values.maxlen}
+
+    def load_state_dict(self, state):
+        from collections import deque
+        self.values = deque(state["values"], maxlen=state["maxlen"])
 
 def checkNoneGradient(model):
     for name, param in model.named_parameters():
@@ -121,7 +131,8 @@ def load_pretrained_weights(model, filename, device, strict=False):
 
 
 def save_checkpoint(filename, epoch, nIter, model, lossTracker,
-                    best_state_dict, optimizer, lrScheduler, metadata=None):
+                    best_state_dict, optimizer, lrScheduler, metadata=None,
+                    training_state=None):
     checkpoint = {
             #'conf':model.conf.__dict__,
             'state_dict': model.state_dict(), 
@@ -131,9 +142,23 @@ def save_checkpoint(filename, epoch, nIter, model, lossTracker,
             'loss_tracker': lossTracker,
             'optimizer_state_dict': optimizer.state_dict(),
             'lr_scheduler_state_dict': lrScheduler.state_dict(),
-            'metadata': copy.deepcopy(metadata) if metadata is not None else {}
+            'metadata': copy.deepcopy(metadata) if metadata is not None else {},
+            'training_state': copy.deepcopy(training_state)
+                if training_state is not None else {},
             }
-    torch.save(checkpoint, filename)
+    destination = pathlib.Path(filename)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                dir=destination.parent, prefix=destination.name + ".",
+                suffix=".tmp", delete=False) as handle:
+            temporary = pathlib.Path(handle.name)
+        torch.save(checkpoint, temporary)
+        os.replace(temporary, destination)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 def getOptimizerGroup(model):
     param_optimizer = list(model.named_parameters())
@@ -210,7 +235,8 @@ def initializeCheckpoint(Model,
     return  startEpoch, startIter, model, lossTracker, best_state_dict, optimizer, lrScheduler
     
 
-def load_checkpoint(Model, conf, filename,device, strict=False):
+def load_checkpoint(Model, conf, filename,device, strict=False,
+                    return_training_state=False):
     checkpoint = torch.load(filename, map_location=device, weights_only=False)
 
     startEpoch = checkpoint['epoch']
@@ -267,7 +293,11 @@ def load_checkpoint(Model, conf, filename,device, strict=False):
 
     lossTracker = checkpoint['loss_tracker']
 
-    return startEpoch, startIter, model, lossTracker, best_state_dict, optimizer, lrScheduler
+    result = (startEpoch, startIter, model, lossTracker, best_state_dict,
+              optimizer, lrScheduler)
+    if return_training_state:
+        return (*result, checkpoint.get('training_state', {}))
+    return result
 
 
 def computeMetrics(model, x, notes):

@@ -22,6 +22,9 @@
     "weight_decay": 0.0001,
     "optimizer_steps": 10000,
     "augmentation": false,
+    "deterministic_data_order": true,
+    "exact_mid_epoch_resume": true,
+    "checkpoint_interval_steps": 500,
     "seeds": [20261108, 20261109, 20261110]
   },
   "systems": {

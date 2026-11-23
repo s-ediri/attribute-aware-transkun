@@ -55,6 +55,26 @@ class CheckpointMetadataTest(unittest.TestCase):
         self.assertEqual(resumed, metadata)
         self.assertEqual(checkpoint["metadata"], metadata)
 
+    def test_checkpoint_save_is_atomic_and_preserves_training_state(self):
+        metadata = {"system_id": "B"}
+        training_state = {"schema_version": 1, "next_batch": 7}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / "checkpoint.pt"
+            model = nn.Linear(2, 1)
+            optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+            scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer, max_lr=1e-3, total_steps=2)
+            save_checkpoint(
+                path, epoch=0, nIter=7, model=model,
+                lossTracker={"train": [], "val": []},
+                best_state_dict=model.state_dict(), optimizer=optimizer,
+                lrScheduler=scheduler, metadata=metadata,
+                training_state=training_state)
+            checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+            temporary_files = list(Path(temp_dir).glob("*.tmp"))
+        self.assertEqual(checkpoint["training_state"], training_state)
+        self.assertEqual(temporary_files, [])
+
     def test_resume_rejects_a_changed_seed(self):
         metadata = {
             "system_id": "C", "seed": 123, "model_module": "module",

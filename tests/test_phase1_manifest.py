@@ -17,6 +17,11 @@ class PhaseOneManifestTest(unittest.TestCase):
         self.assertEqual(
             manifest["matched_training"]["seeds"],
             [20261108, 20261109, 20261110])
+        training = manifest["matched_training"]
+        self.assertFalse(training["augmentation"])
+        self.assertTrue(training["deterministic_data_order"])
+        self.assertTrue(training["exact_mid_epoch_resume"])
+        self.assertEqual(training["checkpoint_interval_steps"], 500)
         self.assertTrue(manifest["dataset"]["pedal_extension"])
         for system in manifest["systems"].values():
             self.assertTrue((REPOSITORY_ROOT / system["config"]).is_file())
