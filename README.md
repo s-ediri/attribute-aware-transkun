@@ -249,8 +249,9 @@ new structured-attribute head keeps its neutral initialization and is trained
 from the MAESTRO annotations. This option is only for starting a new run; omit
 it when resuming an existing training checkpoint. `--nIter` is the maximum
 number of optimizer steps; training validates and saves the checkpoint at that
-step before exiting. Set `--dataLoaderWorkers 0` if worker-side WAV memory
-mapping exhausts the Windows paging file.
+step before exiting. `--dataLoaderWorkers` defaults to `0`. If it is supplied,
+the requested count is used unchanged on every operating system; reduce it to
+`0` manually if worker-side WAV loading exhausts the Windows paging file.
 
 After resampling the 2017 and 2018 MAESTRO audio to 44.1 kHz, generate metadata
 with sustain-pedal extension using the default behavior:

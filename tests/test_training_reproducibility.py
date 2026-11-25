@@ -54,12 +54,15 @@ class TrainingReproducibilityTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cursor"):
             remaining_epoch_indices(10, batch_size=2, next_batch=6)
 
-    def test_windows_uses_synchronous_data_loading(self):
-        self.assertEqual(effective_data_loader_workers(2, platform="win32"), 0)
+    def test_windows_preserves_explicit_worker_count(self):
+        self.assertEqual(effective_data_loader_workers(2, platform="win32"), 2)
         self.assertEqual(effective_data_loader_workers(0, platform="win32"), 0)
 
-    def test_non_windows_preserves_requested_workers(self):
+    def test_worker_count_is_platform_independent(self):
         self.assertEqual(effective_data_loader_workers(2, platform="linux"), 2)
+        self.assertEqual(effective_data_loader_workers(2, platform="darwin"), 2)
+        with self.assertRaisesRegex(ValueError, "negative"):
+            effective_data_loader_workers(-1, platform="win32")
 
     def test_scheduler_warmup_is_absolute_across_resumes(self):
         self.assertFalse(scheduler_warmup_complete(500))

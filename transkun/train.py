@@ -58,10 +58,10 @@ def current_git_revision():
 
 
 def effective_data_loader_workers(requested, platform=None):
-    """Avoid duplicating the large MAESTRO annotation in Windows workers."""
-    platform = sys.platform if platform is None else platform
-    if platform == "win32" and requested > 0:
-        return 0
+    """Return the explicitly requested worker count on every platform."""
+    requested = int(requested)
+    if requested < 0:
+        raise ValueError("DataLoader worker count cannot be negative")
     return requested
 
 
@@ -375,11 +375,6 @@ def train(workerId, nWorker, filename, runSeed, args):
         augmentator = Data.AugmentatorAudiomentations(sampleRate=44100, noiseFolder = args.noiseFolder, convIRFolder = args.irFolder)
 
     dataLoaderWorkers = effective_data_loader_workers(args.dataLoaderWorkers)
-    if workerId == 0 and dataLoaderWorkers != args.dataLoaderWorkers:
-        print(
-                "Windows memory safeguard: using synchronous data loading "
-                "(requested workers={}, effective workers={}).".format(
-                        args.dataLoaderWorkers, dataLoaderWorkers))
     dataLoaderOptions = {"num_workers": dataLoaderWorkers}
     if dataLoaderWorkers > 0:
         dataLoaderOptions["prefetch_factor"] = max(4, dataLoaderWorkers)
@@ -710,7 +705,10 @@ if __name__ == '__main__':
     parser.add_argument('--batchSize', default=4, type=int)
     parser.add_argument('--hopSize', required=False, type=float)
     parser.add_argument('--chunkSize', required=False, type=float)
-    parser.add_argument('--dataLoaderWorkers', default = 2, type=int)
+    parser.add_argument(
+            '--dataLoaderWorkers', default=0, type=int,
+            help=("number of DataLoader worker processes; defaults to 0 and an "
+                  "explicit value is honored on every operating system"))
     parser.add_argument('--gradClippingQuantile', default = 0.8, type=float)
 
 
@@ -743,6 +741,8 @@ if __name__ == '__main__':
 
     if args.nIter < 1:
         parser.error("--nIter must be a positive number of optimizer steps")
+    if args.dataLoaderWorkers < 0:
+        parser.error("--dataLoaderWorkers cannot be negative")
     if args.nProcess != 1:
         parser.error(
                 "controlled exact-resume training currently requires --nProcess 1")
