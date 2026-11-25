@@ -473,15 +473,14 @@ def train(workerId, nWorker, filename, runSeed, args):
                     model.eval()
                     stats = model.computeStats(audioSlices, notesBatch)
                     stats2 = model.computeStatsMIREVAL(audioSlices, notesBatch)
-
-            totalGT = totalGT+ stats2["nGT"]
-            totalEst= totalEst + stats2["nEst"]
-            totalCorrect= totalCorrect+ stats2["nCorrect"]
-            totalGTFramewise = totalGTFramewise+ stats["nGTFramewise"]
-            totalEstFramewise = totalEstFramewise + stats["nEstFramewise"]
-            totalCorrectFramewise = totalCorrectFramewise+ stats["nCorrectFramewise"]
-            totalSEVelocity = totalSEVelocity + stats["seVelocityForced"]
-            totalSEOF = totalSEOF + stats["seOFForced"]
+                    totalGT = totalGT+ stats2["nGT"]
+                    totalEst= totalEst + stats2["nEst"]
+                    totalCorrect= totalCorrect+ stats2["nCorrect"]
+                    totalGTFramewise = totalGTFramewise+ stats["nGTFramewise"]
+                    totalEstFramewise = totalEstFramewise + stats["nEstFramewise"]
+                    totalCorrectFramewise = totalCorrectFramewise+ stats["nCorrectFramewise"]
+                    totalSEVelocity = totalSEVelocity + stats["seVelocityForced"]
+                    totalSEOF = totalSEOF + stats["seOFForced"]
 
 
             # checkNoneGradient(model)

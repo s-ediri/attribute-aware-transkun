@@ -540,6 +540,13 @@ class TransKun(torch.nn.Module):
                 ctx_a_all.append(ctx_a)
                 ctx_b_all.append(ctx_b)
 
+        if not ctx_a_all:
+            featureSize = ctxBatch.shape[-1]
+            emptyFeatures = ctxBatch.new_empty((0, featureSize))
+            emptyIndices = torch.empty(0, dtype=torch.long, device=device)
+            return (emptyFeatures, emptyFeatures.clone(), emptyIndices,
+                    emptyIndices.clone())
+
         ctx_a_all = torch.cat(ctx_a_all, dim = 0)
         ctx_b_all = torch.cat(ctx_b_all, dim = 0)
         symIdx_all= torch.cat(symIdx_all, dim = 0)

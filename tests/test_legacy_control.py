@@ -13,6 +13,33 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 class LegacyControlTest(unittest.TestCase):
+    def test_legacy_interval_feature_gather_handles_empty_batch(self):
+        model = object.__new__(ModelTransformerLegacy.TransKun)
+        model.targetMIDIPitch = [21, 22]
+        context = torch.zeros(1, 2, 3, 4)
+
+        gathered = model.fetchIntervalFeaturesBatch(
+            context, [[[], []]])
+
+        self.assertEqual(gathered[0].shape, (0, 4))
+        self.assertEqual(gathered[1].shape, (0, 4))
+        self.assertEqual(gathered[2].shape, (0,))
+        self.assertEqual(gathered[3].shape, (0,))
+        self.assertEqual(gathered[2].dtype, torch.long)
+
+    def test_structured_interval_feature_gather_handles_empty_batch(self):
+        model = object.__new__(ModelTransformer.TransKun)
+        model.targetMIDIPitch = [21, 22]
+        context = torch.zeros(1, 2, 3, 4)
+
+        gathered = model.fetchIntervalFeaturesBatch(
+            context, [[[], []]])
+
+        self.assertEqual(gathered[0].shape, (0, 4))
+        self.assertEqual(gathered[1].shape, (0, 4))
+        self.assertEqual(gathered[2].shape, (0,))
+        self.assertEqual(gathered[3].shape, (0,))
+
     def test_packaged_checkpoint_matches_legacy_architecture_strictly(self):
         configuration = json.loads(
             (REPOSITORY_ROOT / "experiments/configs/legacy_finetune.conf").read_text(

@@ -623,7 +623,7 @@ class Backbone(nn.Module):
 
 
         for l in self.encoderLayers:
-            hAll = checkpoint(l, hAll)
+            hAll = checkpoint(l, hAll, use_reentrant=True)
 
 
         h, hTarget = hAll.split([h.shape[-2], hTarget.shape[-2]], dim = -2)

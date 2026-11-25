@@ -448,6 +448,18 @@ class TransKun(torch.nn.Module):
 
         # then make forced predictions about velocity and refined onset offset
 
+        if not any(intervalsBatch_flatten):
+            return {
+                    "nGT": nGT,
+                    "nEst": nEst,
+                    "nCorrect": nCorrect,
+                    "nGTFramewise": nGTFramewise,
+                    "nEstFramewise": nEstFramewise,
+                    "nCorrectFramewise": nCorrectFramewise,
+                    "seVelocityForced": 0.0,
+                    "seOFForced": 0.0,
+                    }
+
         ctx_a_all, ctx_b_all, symIdx_all, scatterIdx_all = self.fetchIntervalFeaturesBatch(ctxBatch, intervalsBatch)
 
         attributeInput = torch.cat([ctx_a_all,
@@ -529,6 +541,13 @@ class TransKun(torch.nn.Module):
 
                 ctx_a_all.append(ctx_a)
                 ctx_b_all.append(ctx_b)
+
+        if not ctx_a_all:
+            featureSize = ctxBatch.shape[-1]
+            emptyFeatures = ctxBatch.new_empty((0, featureSize))
+            emptyIndices = torch.empty(0, dtype=torch.long, device=device)
+            return (emptyFeatures, emptyFeatures.clone(), emptyIndices,
+                    emptyIndices.clone())
 
         ctx_a_all = torch.cat(ctx_a_all, dim = 0)
         ctx_b_all = torch.cat(ctx_b_all, dim = 0)

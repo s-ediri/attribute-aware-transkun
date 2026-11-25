@@ -1,6 +1,7 @@
 import random
 import tempfile
 import unittest
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -19,9 +20,26 @@ from transkun.train import (
     seed_everything,
 )
 from transkun.TrainUtil import MovingBuffer, save_checkpoint
+from transkun.LayersTransformer import Backbone
 
 
 class TrainingReproducibilityTest(unittest.TestCase):
+    def test_gradient_checkpoint_declares_reentrant_behavior(self):
+        backbone = Backbone(
+            inputSize=2, baseSize=4, posEmbedInitGamma=1, nHead=1,
+            fourierSize=4, hiddenFactor=1, hiddenFactorAttn=1,
+            expansionFactor=1, dropoutProb=0, nLayers=1,
+            enabledAttn=["F", "T"], useGradientCheckpoint=True,
+            downsampleF=True)
+        backbone.train()
+        inputs = torch.randn(1, 16, 16, 2, requires_grad=True)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "error", message=".*use_reentrant parameter should be passed.*")
+            output = backbone(inputs, torch.tensor([21, 22]))
+            output.sum().backward()
+        self.assertIsNotNone(inputs.grad)
+
     def test_periodic_checkpoint_uses_completed_global_steps(self):
         self.assertFalse(periodic_checkpoint_due(0))
         self.assertFalse(periodic_checkpoint_due(499))
